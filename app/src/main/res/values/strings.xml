@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Locate</string>
     <string name="hello_world">Hello world!</string>
+    <string name="toolbar_map">Map</string>
+    <string name="toolbar_list">List</string>
+    <string name="menu_item_map">Map/List</string>
 </resources>
