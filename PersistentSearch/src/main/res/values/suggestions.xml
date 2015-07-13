@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string-array name="Attraction">
+        <item>Aquaria</item>
+        <item>Art Galleries</item>
+        <item>Beaches</item>
+        <item>Botanical Gardens</item>
+        <item>Bridges</item>
+        <item>Castles</item>
+        <item>Historical Places</item>
+        <item>Island Resorts</item>
+        <item>Landmarks</item>
+        <item>Libraries</item>
+        <item>Monuments</item>
+        <item>Museums</item>
+        <item>Skyscrapers</item>
+        <item>Temples</item>
+        <item>Theme Parks</item>
+    </string-array>
+
+    <string-array name="Entertainment">
+        <item>Art gallery</item>
+        <item>Arcade</item>
+        <item>Casino</item>
+        <item>Cinema</item>
+        <item>Museum</item>
+        <item>Night life/Disco/Clubs</item>
+        <item>Stage</item>
+        <item>Winery/bar/pub</item>
+    </string-array>
+
+    <string-array name="Lodging">
+        <item>Camping</item>
+        <item>Guesthouse</item>
+        <item>Hotel</item>
+        <item>Recreational camp</item>
+        <item>Hostel</item>
+    </string-array>
+
+    <string-array name="Recreation">
+        <item>Amusement Park</item>
+        <item>Beach</item>
+        <item>Bowling Alley</item>
+        <item>Fairground/Pasar Malam</item>
+        <item>Fitness Club/Gym</item>
+        <item>Golf Course</item>
+        <item>Hiking Ground</item>
+        <item>Ice Rink</item>
+        <item>Marina(harbour)</item>
+        <item>National Park</item>
+        <item>National Forest</item>
+        <item>Outdoor Sport</item>
+        <item>Park</item>
+        <item>Pool Hall</item>
+        <item>Ski Resort</item>
+        <item>Sports Center</item>
+        <item>Squash Court</item>
+        <item>Stadium/Arena</item>
+        <item>State Park</item>
+        <item>Swimming Pool</item>
+        <item>Tennis Court</item>
+        <item>Zoo/Aquarium</item>
+    </string-array>
+
+    <string-array name="Food_Drink">
+        <item>American</item>
+        <item>Arabian</item>
+        <item>Argentinian</item>
+        <item>Asian</item>
+        <item>Australian</item>
+        <item>Bangladeshi</item>
+        <item>Bar</item>
+        <item>Belgium</item>
+        <item>Brazilian</item>
+        <item>Burmese</item>
+        <item>Canadian</item>
+        <item>Cantonese</item>
+        <item>Caribbean</item>
+        <item>Chinese</item>
+        <item>Dessert</item>
+        <item>European</item>
+        <item>Filipino</item>
+        <item>French</item>
+        <item>Fusion</item>
+        <item>German</item>
+        <item>Greek</item>
+        <item>Halal</item>
+        <item>Indian</item>
+        <item>Indonesian</item>
+        <item>International</item>
+        <item>Iranian</item>
+        <item>Italian</item>
+        <item>Japanese</item>
+        <item>Korean</item>
+        <item>Latin American</item>
+        <item>Mediterranean</item>
+        <item>Mexican</item>
+        <item>Middle Eastern</item>
+        <item>Mongolian</item>
+        <item>Moroccan</item>
+        <item>Pakistani</item>
+        <item>Peranakan</item>
+        <item>Spanish</item>
+        <item>Swedish</item>
+        <item>Taiwanese</item>
+        <item>Thai</item>
+        <item>Turkish</item>
+        <item>Vegetarian</item>
+        <item>Vietnamese</item>
+        <item>Western</item>
+    </string-array>
+</resources>
