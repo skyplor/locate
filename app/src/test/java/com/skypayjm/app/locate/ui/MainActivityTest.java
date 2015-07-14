@@ -43,7 +43,7 @@ public class MainActivityTest {
     public void setup() throws Exception {
         activity = Robolectric.setupActivity(MainActivity_.class);
         tbMain = (Toolbar) activity.findViewById(R.id.main_toolbar);
-        map_list = (ActionMenuItemView) tbMain.findViewById(R.id.toolbar_map_list);
+        map_list = (ActionMenuItemView) tbMain.findViewById(R.id.action_map_list);
         searchBox = (SearchBox) activity.findViewById(R.id.searchbox);
         drawerLogo = (ImageView) searchBox.findViewById(R.id.drawer_logo);
         searchTextLogo = (TextView) searchBox.findViewById(R.id.logo);

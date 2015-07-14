@@ -2,7 +2,7 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/toolbar_map_list"
+        android:id="@+id/action_map_list"
         android:title="@string/menu_item_map"
         app:showAsAction="always"
         android:icon="@drawable/ic_list_white_24dp"/>
