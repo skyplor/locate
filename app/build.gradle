@@ -29,13 +29,15 @@ dependencies {
     compile project(':PersistentSearch')
     compile 'com.jakewharton.timber:timber:3.1.0'
     compile 'com.google.android.gms:play-services:7.5.0'
-    compile 'net.grandcentrix.tray:tray:0.9.2'
     compile 'com.google.code.gson:gson:2.3.1'
     compile 'com.squareup.retrofit:retrofit:1.9.0'
     compile 'com.squareup.okhttp:okhttp:2.2.0'
     compile 'com.squareup.okhttp:okhttp-urlconnection:2.2.0'
     // For @Nullable/@NonNull
     compile 'com.android.support:support-annotations:+'
+    compile 'io.realm:realm-android:0.81.1'
+    compile 'com.github.dmytrodanylyk.realm-browser:library:0.0.3'
+    compile 'ru.noties.simpleprefs:core:0.9.9'
     testCompile 'junit:junit:4.12'
     testCompile('org.robolectric:robolectric:3.0-rc2') {
         exclude group: 'commons-logging', module: 'commons-logging'

@@ -28,11 +28,16 @@ import org.androidannotations.annotations.UiThread;
 import org.androidannotations.annotations.ViewById;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.List;
 
+import io.realm.Realm;
 import retrofit.Callback;
 import retrofit.RetrofitError;
 import retrofit.client.Response;
+import ru.noties.simpleprefs.SimplePref;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_search)
@@ -40,6 +45,8 @@ public class SearchActivity extends AppCompatActivity {
 
     private CategoryRecyclerAdapter mRecyclerAdapter;
     private List<Category> categories = new ArrayList<>();
+    private SimplePref pref;
+    private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     @ViewById
     Toolbar search_toolbar;
     @ViewById
@@ -55,8 +62,21 @@ public class SearchActivity extends AppCompatActivity {
         LinearLayoutManager llm = new LinearLayoutManager(this);
         llm.setOrientation(LinearLayoutManager.VERTICAL);
         category_resultList.setLayoutManager(llm);
+        pref = new SimplePref(this, "LocatePref");
+        // Only update once a week
+        if (hasNotUpdated(-7))
+            getFoursquareCategories();
+    }
 
-        getFoursquareCategories();
+    private boolean hasNotUpdated(int nDays) {
+        Calendar cal = GregorianCalendar.getInstance();
+        cal.add(Calendar.DAY_OF_YEAR, nDays);
+        Date nDaysAgo = cal.getTime();
+        return pref.get(foursquareCategoriesLastUpdated, 0L) < nDaysAgo.getTime();
+    }
+
+    private long getCurrentDateTime() {
+        return System.currentTimeMillis();
     }
 
     @Background
@@ -71,9 +91,10 @@ public class SearchActivity extends AppCompatActivity {
         FoursquareService.Implementation.get().venuesCategories(new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {
-                List<Category> venues = foursquareResponse.getResponse().getCategories();
-                onCategoriesReceived(venues);
+                List<Category> categories = foursquareResponse.getResponse().getCategories();
+                onCategoriesReceived(categories);
                 Timber.i("Loaded categories");
+                updateSharedPref(getCurrentDateTime());
             }
 
             @Override
@@ -92,15 +113,40 @@ public class SearchActivity extends AppCompatActivity {
         });
     }
 
+    private void updateSharedPref(long timeUpdated) {
+        pref.set(foursquareCategoriesLastUpdated, timeUpdated);
+    }
+
     @UiThread
     public void showWhichItemClicked(int position) {
         Toast.makeText(SearchActivity.this, "Item clicked: " + categories.get(position).getName(), Toast.LENGTH_LONG).show();
-
+        StringBuilder sb = new StringBuilder();
+        sb.append("Item subcategories: ");
+        List<Category> subcategories = categories.get(position).getCategories();
+        if (subcategories != null) {
+            for (int i = 0; i < subcategories.size(); i++) {
+                sb.append("\n");
+                sb.append(subcategories.get(i).getName());
+            }
+            Toast.makeText(SearchActivity.this, sb.toString(), Toast.LENGTH_SHORT).show();
+        }
     }
 
-    private void onCategoriesReceived(List<Category> categories) {
+    private void onCategoriesReceived(final List<Category> categories) {
         mRecyclerAdapter.addItemsToList(categories);
         mRecyclerAdapter.notifyDataSetChanged();
+
+        // Obtain a Realm instance
+        Realm realm = Realm.getInstance(this);
+        // Copy the object to Realm. Any further changes must happen on realmUser
+        realm.executeTransaction(new Realm.Transaction() {
+            @Override
+            public void execute(Realm realm) {
+                for (Category category : categories) {
+                    Category realmCategory = realm.copyToRealmOrUpdate(category);
+                }
+            }
+        });
     }
 
     private void initializeSearchbox() {

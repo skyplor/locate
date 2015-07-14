@@ -4,21 +4,52 @@ import android.support.annotation.NonNull;
 
 import com.google.gson.annotations.SerializedName;
 
+import io.realm.RealmList;
+import io.realm.RealmObject;
+import io.realm.annotations.Ignore;
+import io.realm.annotations.PrimaryKey;
+
 /**
  * Created by Sky on 14/7/2015.
  */
-public class Category {
+public class Category extends RealmObject {
+    @Ignore
     public static final String FIELD_ID = "id";
+    @Ignore
     public static final String FIELD_ICON = "icon";
+    @Ignore
     public static final String FIELD_SHORT_NAME = "shortName";
+    @Ignore
     public static final String FIELD_PLURAL_NAME = "pluralName";
+    @Ignore
     public static final String FIELD_NAME = "name";
+    @Ignore
+    public static final String FIELD_CATEGORIES = "categories";
 
-    @SerializedName(FIELD_ID) @NonNull private String id;
-    @SerializedName(FIELD_ICON) @NonNull private Icon icon;
-    @SerializedName(FIELD_SHORT_NAME) @NonNull private String shortName;
-    @SerializedName(FIELD_PLURAL_NAME) @NonNull private String pluralName;
-    @SerializedName(FIELD_NAME) @NonNull private String name;
+    @PrimaryKey
+    @SerializedName(FIELD_ID)
+    @NonNull
+    private String id;
+
+    @SerializedName(FIELD_ICON)
+    @NonNull
+    private Icon icon;
+
+    @SerializedName(FIELD_SHORT_NAME)
+    @NonNull
+    private String shortName;
+
+    @SerializedName(FIELD_PLURAL_NAME)
+    @NonNull
+    private String pluralName;
+
+    @SerializedName(FIELD_NAME)
+    @NonNull
+    private String name;
+
+    @SerializedName(FIELD_CATEGORIES)
+    @NonNull
+    private RealmList<Category> categories;
 
     @NonNull
     public String getId() {
@@ -63,5 +94,15 @@ public class Category {
 
     public void setName(@NonNull String name) {
         this.name = name;
+    }
+
+
+    @NonNull
+    public RealmList<Category> getCategories() {
+        return categories;
+    }
+
+    public void setCategories(@NonNull RealmList<Category> categories) {
+        this.categories = categories;
     }
 }

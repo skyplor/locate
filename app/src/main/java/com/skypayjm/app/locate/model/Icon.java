@@ -4,13 +4,17 @@ import android.support.annotation.NonNull;
 
 import com.google.gson.annotations.SerializedName;
 
+import io.realm.RealmObject;
+import io.realm.annotations.PrimaryKey;
+
 /**
  * Created by Sky on 14/7/2015.
  */
-public class Icon {
+public class Icon extends RealmObject {
     public static final String FIELD_PREFIX = "prefix";
     public static final String FIELD_SUFFIX = "suffix";
 
+    @PrimaryKey
     @SerializedName(FIELD_PREFIX)
     @NonNull
     private String prefix;

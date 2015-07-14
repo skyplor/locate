@@ -15,11 +15,15 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.dd.realmbrowser.RealmBrowser;
+import com.dd.realmbrowser.RealmFilesActivity;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.places.Places;
 import com.skypayjm.app.locate.R;
+import com.skypayjm.app.locate.model.Category;
+import com.skypayjm.app.locate.model.Icon;
 
 import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.EActivity;
@@ -28,6 +32,7 @@ import org.androidannotations.annotations.OptionsMenu;
 import org.androidannotations.annotations.OptionsMenuItem;
 import org.androidannotations.annotations.ViewById;
 
+import ru.noties.simpleprefs.SimplePref;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_main)
@@ -82,6 +87,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
                 SearchActivity_.intent(MainActivity.this).startForResult(REQUEST_SEARCH);
             }
         });
+        RealmBrowser.getInstance().addRealmModel(Category.class, Icon.class);
     }
 
     @Override
@@ -130,6 +136,11 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
             //This has to be opposite as the current view
             action_map_list.setIcon(R.drawable.ic_map_white_24dp);
         }
+    }
+
+    @OptionsItem
+    void action_realm_dbSelected(){
+        RealmFilesActivity.start(this);
     }
 
     private void switchToMap() {
