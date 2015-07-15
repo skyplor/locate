@@ -14,11 +14,12 @@ import android.widget.Toast;
 import com.quinny898.library.persistentsearch.SearchBox;
 import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.adapter.CategoryRecyclerAdapter;
-import com.skypayjm.app.locate.adapter.RealmCategoryAdapter;
 import com.skypayjm.app.locate.api.FoursquareException;
 import com.skypayjm.app.locate.api.FoursquareResponse;
 import com.skypayjm.app.locate.api.FoursquareService;
+import com.skypayjm.app.locate.db.Migration;
 import com.skypayjm.app.locate.model.Category;
+import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.util.Utility;
 
 import org.androidannotations.annotations.AfterViews;
@@ -33,6 +34,7 @@ import java.util.GregorianCalendar;
 import java.util.List;
 
 import io.realm.Realm;
+import io.realm.RealmConfiguration;
 import io.realm.RealmQuery;
 import io.realm.RealmResults;
 import retrofit.Callback;
@@ -45,10 +47,12 @@ import timber.log.Timber;
 public class SearchActivity extends AppCompatActivity {
 
     private CategoryRecyclerAdapter mRecyclerAdapter;
-    //    private List<Category> categories = new ArrayList<>();
+    private List<Category> categories = new ArrayList<>();
     private SimplePref pref;
     private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     private final String categoriesID = "parentCategoriesID";
+    private boolean atBaseCategories;
+    private Realm realm;
     @ViewById
     Toolbar search_toolbar;
     @ViewById
@@ -61,29 +65,35 @@ public class SearchActivity extends AppCompatActivity {
         setSupportActionBar(search_toolbar);
         initializeSearchbox();
 
-
+        atBaseCategories = true;
         category_resultList.setHasFixedSize(true);
         // Define 3 column grid layout
         final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, 3);
         category_resultList.setLayoutManager(layout);
         pref = new SimplePref(this, "LocatePref");
-//        mRecyclerAdapter = new CategoryRecyclerAdapter(categories, new CategoryRecyclerAdapter.RecyclerViewListener() {
-//            @Override
-//            public void onItemClickListener(View view, int position) {
-//                showWhichItemClicked(position);
-//            }
-//        });
-        mRecyclerAdapter = new CategoryRecyclerAdapter(new CategoryRecyclerAdapter.RecyclerViewListener() {
+        mRecyclerAdapter = new CategoryRecyclerAdapter(categories, new CategoryRecyclerAdapter.RecyclerViewListener() {
             @Override
             public void onItemClickListener(View view, Category category) {
-                showWhichItemClicked(category);
+                if (view.getId() == R.id.ivAddCategory)
+                    addCategoryToSearch(category);
+                goToChildCategory(category);
             }
         });
+        RealmConfiguration config1 = new RealmConfiguration.Builder(this)
+                .schemaVersion(2)
+                .migration(new Migration())
+                .build();
+
+        realm = Realm.getInstance(config1);
         category_resultList.setAdapter(mRecyclerAdapter);
         // Only update once a week
         if (hasNotUpdated(-7))
             getFoursquareCategories();
-        loadCategories();
+        else loadBaseCategories();
+    }
+
+    private void addCategoryToSearch(Category category) {
+
     }
 
     private boolean hasNotUpdated(int nDays) {
@@ -106,6 +116,7 @@ public class SearchActivity extends AppCompatActivity {
                 onCategoriesReceived(categories);
                 Timber.i("Loaded categories");
                 updateSharedPref(getCurrentDateTime());
+                loadBaseCategories();
             }
 
             @Override
@@ -127,8 +138,6 @@ public class SearchActivity extends AppCompatActivity {
     private void onCategoriesReceived(final List<Category> categories) {
         final StringBuilder stringBuilder = new StringBuilder();
 
-        // Obtain a Realm instance
-        Realm realm = Realm.getInstance(this);
         // Copy the object to Realm. Any further changes must happen on realmUser
         realm.executeTransaction(new Realm.Transaction() {
             @Override
@@ -136,14 +145,58 @@ public class SearchActivity extends AppCompatActivity {
                 for (Category category : categories) {
                     stringBuilder.append(category.getId() + " ");
                     Category realmCategory = realm.copyToRealmOrUpdate(category);
+                    storeIntoCategoryRelationshipDFS(realmCategory);
                 }
             }
         });
+//        storeIntoCategoryLevelBFS(categories);
         pref.set(categoriesID, stringBuilder.toString());
     }
 
-    //    @Background
-    public void loadCategories() {
+    // Using Depth-First Search as BFS wouldn't have the parent attribute for us to use. And category's depth is pretty shallow so its ok to use DFS
+    private void storeIntoCategoryRelationshipDFS(Category realmCategory) {
+        if (realmCategory.getCategories() == null || realmCategory.getCategories().isEmpty())
+            return;
+        for (Category child : realmCategory.getCategories()) {
+            storeIntoCategoryRelationshipDFS(child);
+            final CategoryRelationship categoryRelationship = new CategoryRelationship();
+            categoryRelationship.setId(child.getId());
+            categoryRelationship.setChildCategory(child);
+            categoryRelationship.setParentID(realmCategory.getId());
+            categoryRelationship.setParentCategory(realmCategory);
+            realm.copyToRealmOrUpdate(categoryRelationship);
+        }
+    }
+
+    // Method to put each category into the categorylevel table, using breadth-first search
+//    private void storeIntoCategoryLevelBFS(final List<Category> categories) {
+//        realm.executeTransaction(new Realm.Transaction() {
+//            @Override
+//            public void execute(Realm realm) {
+//                int level = 0;
+//                Queue<Category> currentLevel = new LinkedList<>(categories);
+//                Queue<Category> nextLevel = new LinkedList<>();
+//                while (!currentLevel.isEmpty()) {
+//                    Category c = currentLevel.remove();
+//                    CategoryLevel categoryLevel = new CategoryLevel();
+//                    categoryLevel.setId(c.getId());
+//                    categoryLevel.setCategory(c);
+//                    categoryLevel.setLevel(level);
+//                    realm.copyToRealmOrUpdate(categoryLevel);
+//                    // put the children of this category into the nextLevel queue
+//                    if (c.getCategories() != null)
+//                        nextLevel.addAll(c.getCategories());
+//                    if (currentLevel.isEmpty()) {
+//                        currentLevel = nextLevel;
+//                        nextLevel = new LinkedList<>();
+//                        level++;
+//                    }
+//                }
+//            }
+//        });
+//    }
+
+    public void loadBaseCategories() {
         String parentIDstring = pref.get(categoriesID, "");
         if (parentIDstring.equals("")) {
             getFoursquareCategories();
@@ -151,9 +204,6 @@ public class SearchActivity extends AppCompatActivity {
         }
         String[] parentIDs = parentIDstring.split("\\s+");
         if (parentIDs.length > 0) {
-            Timber.i("ParentIDs not zero");
-            // Obtain a Realm instance
-            Realm realm = Realm.getInstance(this);
             RealmQuery query = realm.where(Category.class);
             query = query.equalTo(Category.FIELD_ID, parentIDs[0]);
             for (int i = 1; i < parentIDs.length; i++) {
@@ -161,35 +211,15 @@ public class SearchActivity extends AppCompatActivity {
                 query = query.equalTo(Category.FIELD_ID, parentIDs[i]);
             }
             RealmResults<Category> result = query.findAllSorted(Category.FIELD_NAME);
-            for (Category category : result) {
-                Timber.i("Result Category:" + category.getName());
-            }
-            RealmCategoryAdapter realmAdapter = new RealmCategoryAdapter(this, result, true);
-//            List<Category> categories = new ArrayList<>();
-//            for (Category category : result) {
-//                for (int i = 0; i < parentIDs.length; i++) {
-//                    if (category.getId().equals(parentIDs[i])) {
-//                        Timber.i("ParentID: " + category.getId());
-//                        categories.add(category);
-//                        break;
-//                    }
-//                }
-//                categories.add(category);
-//            }
-            displayCategories(realmAdapter);
-//            displayCategories(categories);
+            List<Category> tempCategories = new ArrayList<>(result);
+            categories = tempCategories;
+            displayCategories();
         }
 
     }
 
-    //    @UiThread
-//    public void displayCategories(List<Category> categories) {
-//        mRecyclerAdapter.addItems(categories);
-//        mRecyclerAdapter.notifyDataSetChanged();
-//    }
-    public void displayCategories(RealmCategoryAdapter realmAdapter) {
-        mRecyclerAdapter.setRealmAdapter(realmAdapter);
-        Timber.i("Displaying categories");
+    public void displayCategories() {
+        mRecyclerAdapter.updateItems(categories);
         mRecyclerAdapter.notifyDataSetChanged();
     }
 
@@ -197,18 +227,21 @@ public class SearchActivity extends AppCompatActivity {
         pref.set(foursquareCategoriesLastUpdated, timeUpdated);
     }
 
-    //    @UiThread
-    public void showWhichItemClicked(Category category) {
-        Toast.makeText(SearchActivity.this, "Item clicked: " + category.getName(), Toast.LENGTH_LONG).show();
-        StringBuilder sb = new StringBuilder();
-        sb.append("Item subcategories: ");
+    public void goToChildCategory(Category category) {
+//        Toast.makeText(SearchActivity.this, "Item clicked: " + category.getName(), Toast.LENGTH_LONG).show();
+//        StringBuilder sb = new StringBuilder();
+//        sb.append("Item subcategories: ");
         List<Category> subcategories = category.getCategories();
-        if (subcategories != null) {
-            for (int i = 0; i < subcategories.size(); i++) {
-                sb.append("\n");
-                sb.append(subcategories.get(i).getName());
-            }
-            Toast.makeText(SearchActivity.this, sb.toString(), Toast.LENGTH_SHORT).show();
+        if (!subcategories.isEmpty()) {
+            atBaseCategories = false;
+
+//            for (int i = 0; i < subcategories.size(); i++) {
+//                sb.append("\n");
+//                sb.append(subcategories.get(i).getName());
+//            }
+//            Toast.makeText(SearchActivity.this, sb.toString(), Toast.LENGTH_SHORT).show();
+            categories = subcategories;
+            displayCategories();
         }
     }
 
@@ -263,6 +296,7 @@ public class SearchActivity extends AppCompatActivity {
 //        setResult(RESULT_OK);
         ResultsActivity_.intent(this).extra("searchterm", searchTerm).start();
         Utility.hide_keyboard(this);
+        realm.close();
         finish();
     }
 
@@ -281,8 +315,74 @@ public class SearchActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        setResult(RESULT_CANCELED);
-        finish();
+        if (atBaseCategories) {
+            setResult(RESULT_CANCELED);
+            realm.close();
+            finish();
+        } else {
+            showParentCategories();
+        }
+    }
+
+    private void showParentCategories() {
+//        RealmQuery query = realm.where(CategoryLevel.class);
+//        if (categories.size() > 0)
+//            query = query.equalTo(CategoryLevel.ID, categories.get(0).getId());
+//        final CategoryLevel result = (CategoryLevel) query.findFirst();
+//        if (result != null) {
+//            if (result.getLevel() == 0)
+//                atBaseCategories = true; // level 0 is the base categories
+//            else {
+//                atBaseCategories = false;
+//                final int parentLevel = result.getLevel() - 1;
+//                realm.executeTransaction(new Realm.Transaction() {
+//                    @Override
+//                    public void execute(Realm realm) {
+//
+//                        RealmResults<CategoryLevel> tempresults = realm.where(CategoryLevel.class).equalTo(CategoryLevel.LEVEL, parentLevel).findAll();
+//                        for (CategoryLevel categoryLevel : tempresults) {
+//
+//                        }
+//
+//                        List<Category> parentCategories = new ArrayList<>();
+//                        for (CategoryLevel categoryLevel : results) {
+//                            parentCategories.add(categoryLevel.getCategory());
+//                        }
+//                        categories = parentCategories;
+//                        displayCategories();
+//                    }
+//                });
+//
+//            }
+//        }
+        RealmQuery query = realm.where(CategoryRelationship.class);
+        if (categories != null && !categories.isEmpty())
+            query = query.equalTo(CategoryRelationship.ID, categories.get(0).getId());
+        CategoryRelationship tempresult = (CategoryRelationship) query.findFirst();
+        if (tempresult == null) {
+            atBaseCategories = true; // table will only consist of subcategories
+        } else {
+            atBaseCategories = false;
+            query = realm.where(CategoryRelationship.class);
+            CategoryRelationship parentResult = (CategoryRelationship) query.equalTo(CategoryRelationship.ID, tempresult.getParentID()).findFirst();
+            if (parentResult == null) {
+                // means our parent is the base
+                loadBaseCategories();
+            } else {
+                // Now to find all those with the same parent
+                RealmResults<CategoryRelationship> results
+                        = realm.where(CategoryRelationship.class)
+                        .equalTo(CategoryRelationship.PARENTID, parentResult.getParentID())
+                        .findAll();
+                List<Category> parentCategories = new ArrayList<>();
+                for (CategoryRelationship categoryRelationship : results) {
+                    parentCategories.add(categoryRelationship.getChildCategory());
+                }
+                categories = parentCategories;
+                displayCategories();
+
+            }
+        }
     }
 
     @Override
