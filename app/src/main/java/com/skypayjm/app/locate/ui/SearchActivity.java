@@ -52,6 +52,7 @@ public class SearchActivity extends AppCompatActivity {
     private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     private final String categoriesID = "parentCategoriesID";
     private boolean atBaseCategories;
+    private boolean isSearchOpened;
     private Realm realm;
     @ViewById
     Toolbar search_toolbar;
@@ -80,7 +81,7 @@ public class SearchActivity extends AppCompatActivity {
             }
         });
         RealmConfiguration config1 = new RealmConfiguration.Builder(this)
-                .schemaVersion(2)
+                .schemaVersion(1)
                 .migration(new Migration())
                 .build();
 
@@ -93,7 +94,8 @@ public class SearchActivity extends AppCompatActivity {
     }
 
     private void addCategoryToSearch(Category category) {
-
+        if (!isSearchOpened) searchbox.toggleSearch();
+        searchbox.setSearchString(searchbox.getSearchText().concat(category.getName() + " "));
     }
 
     private boolean hasNotUpdated(int nDays) {
@@ -149,7 +151,6 @@ public class SearchActivity extends AppCompatActivity {
                 }
             }
         });
-//        storeIntoCategoryLevelBFS(categories);
         pref.set(categoriesID, stringBuilder.toString());
     }
 
@@ -167,34 +168,6 @@ public class SearchActivity extends AppCompatActivity {
             realm.copyToRealmOrUpdate(categoryRelationship);
         }
     }
-
-    // Method to put each category into the categorylevel table, using breadth-first search
-//    private void storeIntoCategoryLevelBFS(final List<Category> categories) {
-//        realm.executeTransaction(new Realm.Transaction() {
-//            @Override
-//            public void execute(Realm realm) {
-//                int level = 0;
-//                Queue<Category> currentLevel = new LinkedList<>(categories);
-//                Queue<Category> nextLevel = new LinkedList<>();
-//                while (!currentLevel.isEmpty()) {
-//                    Category c = currentLevel.remove();
-//                    CategoryLevel categoryLevel = new CategoryLevel();
-//                    categoryLevel.setId(c.getId());
-//                    categoryLevel.setCategory(c);
-//                    categoryLevel.setLevel(level);
-//                    realm.copyToRealmOrUpdate(categoryLevel);
-//                    // put the children of this category into the nextLevel queue
-//                    if (c.getCategories() != null)
-//                        nextLevel.addAll(c.getCategories());
-//                    if (currentLevel.isEmpty()) {
-//                        currentLevel = nextLevel;
-//                        nextLevel = new LinkedList<>();
-//                        level++;
-//                    }
-//                }
-//            }
-//        });
-//    }
 
     public void loadBaseCategories() {
         String parentIDstring = pref.get(categoriesID, "");
@@ -228,18 +201,9 @@ public class SearchActivity extends AppCompatActivity {
     }
 
     public void goToChildCategory(Category category) {
-//        Toast.makeText(SearchActivity.this, "Item clicked: " + category.getName(), Toast.LENGTH_LONG).show();
-//        StringBuilder sb = new StringBuilder();
-//        sb.append("Item subcategories: ");
         List<Category> subcategories = category.getCategories();
         if (!subcategories.isEmpty()) {
             atBaseCategories = false;
-
-//            for (int i = 0; i < subcategories.size(); i++) {
-//                sb.append("\n");
-//                sb.append(subcategories.get(i).getName());
-//            }
-//            Toast.makeText(SearchActivity.this, sb.toString(), Toast.LENGTH_SHORT).show();
             categories = subcategories;
             displayCategories();
         }
@@ -256,6 +220,7 @@ public class SearchActivity extends AppCompatActivity {
             @Override
             public void onSearchOpened() {
                 searchbox.setMenuVisibility(View.VISIBLE);
+                isSearchOpened = true;
             }
 
             @Override
@@ -266,7 +231,7 @@ public class SearchActivity extends AppCompatActivity {
             @Override
             public void onSearchClosed() {
                 searchbox.setMenuVisibility(View.INVISIBLE);
-
+                isSearchOpened = false;
             }
 
             @Override
@@ -325,36 +290,6 @@ public class SearchActivity extends AppCompatActivity {
     }
 
     private void showParentCategories() {
-//        RealmQuery query = realm.where(CategoryLevel.class);
-//        if (categories.size() > 0)
-//            query = query.equalTo(CategoryLevel.ID, categories.get(0).getId());
-//        final CategoryLevel result = (CategoryLevel) query.findFirst();
-//        if (result != null) {
-//            if (result.getLevel() == 0)
-//                atBaseCategories = true; // level 0 is the base categories
-//            else {
-//                atBaseCategories = false;
-//                final int parentLevel = result.getLevel() - 1;
-//                realm.executeTransaction(new Realm.Transaction() {
-//                    @Override
-//                    public void execute(Realm realm) {
-//
-//                        RealmResults<CategoryLevel> tempresults = realm.where(CategoryLevel.class).equalTo(CategoryLevel.LEVEL, parentLevel).findAll();
-//                        for (CategoryLevel categoryLevel : tempresults) {
-//
-//                        }
-//
-//                        List<Category> parentCategories = new ArrayList<>();
-//                        for (CategoryLevel categoryLevel : results) {
-//                            parentCategories.add(categoryLevel.getCategory());
-//                        }
-//                        categories = parentCategories;
-//                        displayCategories();
-//                    }
-//                });
-//
-//            }
-//        }
         RealmQuery query = realm.where(CategoryRelationship.class);
         if (categories != null && !categories.isEmpty())
             query = query.equalTo(CategoryRelationship.ID, categories.get(0).getId());
