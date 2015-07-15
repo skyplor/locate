@@ -99,10 +99,6 @@ public class SearchBox extends RelativeLayout {
 		this(context, attrs, 0);
 	}
 
-	public MaterialMenuView getMaterialMenu() {
-		return materialMenu;
-	}
-
 	/**
 	 * Create a searchbox with params and a style
 	 * @param context Context

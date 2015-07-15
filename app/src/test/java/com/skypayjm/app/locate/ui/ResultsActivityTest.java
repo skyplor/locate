@@ -28,8 +28,8 @@ import static junit.framework.Assert.assertTrue;
  */
 @RunWith(RobolectricGradleTestRunner.class)
 @Config(constants = BuildConfig.class, emulateSdk = 18, reportSdk = 18)
-public class MainActivityTest {
-    private MainActivity_ activity;
+public class ResultsActivityTest {
+    private ResultsActivity_ activity;
     private Toolbar tbMain;
     private ActionMenuItemView map_list;
     private SearchBox searchBox;
@@ -41,7 +41,7 @@ public class MainActivityTest {
 
     @Before
     public void setup() throws Exception {
-        activity = Robolectric.setupActivity(MainActivity_.class);
+        activity = Robolectric.setupActivity(ResultsActivity_.class);
         tbMain = (Toolbar) activity.findViewById(R.id.main_toolbar);
         map_list = (ActionMenuItemView) tbMain.findViewById(R.id.action_map_list);
         searchBox = (SearchBox) activity.findViewById(R.id.searchbox);
@@ -72,7 +72,7 @@ public class MainActivityTest {
 
     @Test
     public void titleIsCorrect() throws Exception {
-        Activity activity = Robolectric.setupActivity(MainActivity_.class);
+        Activity activity = Robolectric.setupActivity(ResultsActivity_.class);
         assertTrue(activity.getTitle().toString().equals("Locate"));
     }
 

@@ -32,12 +32,11 @@ import org.androidannotations.annotations.OptionsMenu;
 import org.androidannotations.annotations.OptionsMenuItem;
 import org.androidannotations.annotations.ViewById;
 
-import ru.noties.simpleprefs.SimplePref;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_main)
 @OptionsMenu(R.menu.menu_main)
-public class MainActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+public class ResultsActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG_MAP = "MAP", TAG_LIST = "LIST";
     private boolean isMapMode;
@@ -84,7 +83,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
         tvSearch.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                SearchActivity_.intent(MainActivity.this).startForResult(REQUEST_SEARCH);
+                SearchActivity_.intent(ResultsActivity.this).startForResult(REQUEST_SEARCH);
             }
         });
         RealmBrowser.getInstance().addRealmModel(Category.class, Icon.class);
@@ -126,12 +125,12 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     void action_map_listSelected() {
         isMapMode = !isMapMode;
         if (isMapMode) {
-            Toast.makeText(MainActivity.this, "Now showing Map View with List icon", Toast.LENGTH_SHORT).show();
+            Toast.makeText(ResultsActivity.this, "Now showing Map View with List icon", Toast.LENGTH_SHORT).show();
             switchToMap();
             //This has to be opposite as the current view
             action_map_list.setIcon(R.drawable.ic_list_white_24dp);
         } else {
-            Toast.makeText(MainActivity.this, "Now showing List View with Map icon", Toast.LENGTH_SHORT).show();
+            Toast.makeText(ResultsActivity.this, "Now showing List View with Map icon", Toast.LENGTH_SHORT).show();
             switchToList();
             //This has to be opposite as the current view
             action_map_list.setIcon(R.drawable.ic_map_white_24dp);
@@ -258,7 +257,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
 
         @Override
         public void onDismiss(DialogInterface dialog) {
-            ((MainActivity_) getActivity()).onDialogDismissed();
+            ((ResultsActivity_) getActivity()).onDialogDismissed();
         }
     }
 
