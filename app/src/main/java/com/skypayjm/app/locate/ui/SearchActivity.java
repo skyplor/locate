@@ -439,7 +439,9 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         int inPos = (!query.contains(IN)) ? Integer.MAX_VALUE : (including ? query.indexOf(IN) + IN.length() : query.indexOf(IN));
         int atPos = (!query.contains(AT)) ? Integer.MAX_VALUE : (including ? query.indexOf(AT) + AT.length() : query.indexOf(AT));
         int aroundPos = (!query.contains(AROUND)) ? Integer.MAX_VALUE : (including ? query.indexOf(AROUND) + AROUND.length() : query.indexOf(AROUND));
-        return Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
+        int result = Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
+        if (result == Integer.MAX_VALUE) Timber.i("result is max value");
+        return result == Integer.MAX_VALUE ? query.length() : result;
     }
 
     private boolean isMinCharLong(int start, int searchqueryLength) {
@@ -511,14 +513,15 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         }
         // If user does not select any category, we will search from the input string directly
         if (selectedIds == null || selectedIds.isEmpty()) {
-            query = searchTerm.substring(0, getMinimumPosition(query, false));
+            Timber.i("Minimum position: " + getMinimumPosition(searchTerm, false));
+            query = searchTerm.substring(0, getMinimumPosition(searchTerm, false));
         } else {
             categoryIds = selectedIds.get(0);
             for (int index = 1; index < selectedIds.size(); index++) {
                 categoryIds = categoryIds + "," + selectedIds.get(index);
             }
         }
-        Timber.i("Yishun MRT: " + location);
+        Timber.i("Query: " + query);
         FoursquareService.Implementation.get().search(location, radius, query, categoryIds, FOURSQUARE_INTENT, new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {

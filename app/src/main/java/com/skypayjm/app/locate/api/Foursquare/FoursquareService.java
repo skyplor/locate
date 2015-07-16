@@ -4,6 +4,7 @@ import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.skypayjm.app.locate.BuildConfig;
 
 import io.realm.RealmObject;
 import retrofit.Callback;
@@ -65,6 +66,7 @@ public interface FoursquareService {
                     .setEndpoint("https://api.foursquare.com/v2")
                     .setRequestInterceptor(new FoursquareRequestInterceptor())
                     .setConverter(new GsonConverter(gson))
+                    .setLogLevel(BuildConfig.DEBUG ? RestAdapter.LogLevel.FULL : RestAdapter.LogLevel.NONE)
                     .setErrorHandler(new FoursquareErrorHandler());
         }
     }
