@@ -9,7 +9,7 @@ import android.provider.Settings;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
-import com.skypayjm.app.locate.model.Location;
+import com.skypayjm.app.locate.model.FoursquareLocation;
 import com.skypayjm.app.locate.model.Venue;
 
 /**
@@ -62,10 +62,10 @@ public class Utility {
     public static Venue createCurrentVenue(double lat, double lng) {
         Venue currentLocation = new Venue();
         currentLocation.setName("Current Location");
-        Location location = new Location();
-        location.setLat(lat);
-        location.setLng(lng);
-        currentLocation.setLocation(location);
+        FoursquareLocation foursquareLocation = new FoursquareLocation();
+        foursquareLocation.setLat(lat);
+        foursquareLocation.setLng(lng);
+        currentLocation.setFoursquareLocation(foursquareLocation);
         return currentLocation;
     }
 }

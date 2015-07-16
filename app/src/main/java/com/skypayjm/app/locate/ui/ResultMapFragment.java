@@ -26,8 +26,6 @@ public class ResultMapFragment extends Fragment {
     @ViewById
     MapView mapView;
 
-    private GoogleMap googleMap;
-
     public ResultMapFragment() {
         // Required empty public constructor
     }
@@ -73,7 +71,7 @@ public class ResultMapFragment extends Fragment {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        googleMap = mapView.getMap();
+        GoogleMap googleMap = mapView.getMap();
         // latitude and longitude
         double latitude = 1.3667;
         double longitude = 103.8;

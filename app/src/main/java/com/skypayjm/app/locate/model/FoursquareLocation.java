@@ -7,7 +7,7 @@ import com.google.gson.annotations.SerializedName;
 /**
  * Created by Sky on 14/7/2015.
  */
-public class Location {
+public class FoursquareLocation {
     public static final String FIELD_ADDRESS = "address";
     public static final String FIELD_CROSSSTREET = "crossStreet";
     public static final String FIELD_CITY = "city";

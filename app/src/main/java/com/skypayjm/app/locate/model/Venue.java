@@ -25,7 +25,7 @@ public class Venue {
 
     @SerializedName(FIELD_LOCATION)
     @NonNull
-    private Location location;
+    private FoursquareLocation foursquareLocation;
 
     @SerializedName(FIELD_CATEGORIES)
     @NonNull
@@ -41,12 +41,12 @@ public class Venue {
     }
 
     @NonNull
-    public Location getLocation() {
-        return location;
+    public FoursquareLocation getFoursquareLocation() {
+        return foursquareLocation;
     }
 
-    public void setLocation(@NonNull Location location) {
-        this.location = location;
+    public void setFoursquareLocation(@NonNull FoursquareLocation foursquareLocation) {
+        this.foursquareLocation = foursquareLocation;
     }
 
     @NonNull

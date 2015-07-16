@@ -5,6 +5,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
@@ -214,21 +215,20 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         // may occur while attempting to connect with Google.
 
         Timber.i("Connection to Google failed...");
-        if (mResolvingError) {
-            // Already attempting to resolve an error.
-            return;
-        } else if (connectionResult.hasResolution()) {
-            try {
+        if (!mResolvingError) {
+            if (connectionResult.hasResolution()) {
+                try {
+                    mResolvingError = true;
+                    connectionResult.startResolutionForResult(this, REQUEST_RESOLVE_ERROR);
+                } catch (IntentSender.SendIntentException e) {
+                    // There was an error with the resolution intent. Try again.
+                    mGoogleApiClient.connect();
+                }
+            } else {
+                // Show dialog using GooglePlayServicesUtil.getErrorDialog()
+                showErrorDialog(connectionResult.getErrorCode());
                 mResolvingError = true;
-                connectionResult.startResolutionForResult(this, REQUEST_RESOLVE_ERROR);
-            } catch (IntentSender.SendIntentException e) {
-                // There was an error with the resolution intent. Try again.
-                mGoogleApiClient.connect();
             }
-        } else {
-            // Show dialog using GooglePlayServicesUtil.getErrorDialog()
-            showErrorDialog(connectionResult.getErrorCode());
-            mResolvingError = true;
         }
     }
 
@@ -253,6 +253,7 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         public ErrorDialogFragment() {
         }
 
+        @NonNull
         @Override
         public Dialog onCreateDialog(Bundle savedInstanceState) {
             // Get the error code and retrieve the appropriate dialog

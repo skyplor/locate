@@ -31,6 +31,14 @@ public interface FoursquareService {
     @GET("/venues/suggestcompletion")
     void suggestCompletion(@Query(value = "ll", encodeValue = false) String location, @Query("query") String query, Callback<FoursquareResponse> callback);
 
+
+    @GET("/venues/search")
+    void search(@Query(value = "ll", encodeValue = false) String location, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent) throws FoursquareException;
+
+    @GET("/venues/search")
+    void search(@Query(value = "ll", encodeValue = false) String location, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent, Callback<FoursquareResponse> callback);
+
+
     class Implementation {
         public static FoursquareService get() {
             return getBuilder()

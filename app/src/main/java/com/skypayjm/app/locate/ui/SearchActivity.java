@@ -2,6 +2,7 @@ package com.skypayjm.app.locate.ui;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.location.Location;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.support.v4.content.ContextCompat;
@@ -21,12 +22,13 @@ import com.skypayjm.app.locate.adapter.BaseRecyclerAdapter;
 import com.skypayjm.app.locate.adapter.CategoryRecyclerAdapter;
 import com.skypayjm.app.locate.adapter.RecyclerViewListener;
 import com.skypayjm.app.locate.adapter.VenueRecyclerAdapter;
-import com.skypayjm.app.locate.api.Foursquare.FoursquareException;
 import com.skypayjm.app.locate.api.Foursquare.FoursquareResponse;
 import com.skypayjm.app.locate.api.Foursquare.FoursquareService;
 import com.skypayjm.app.locate.db.Migration;
 import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
+import com.skypayjm.app.locate.model.FoursquareLocation;
+import com.skypayjm.app.locate.model.ResponseWrapper;
 import com.skypayjm.app.locate.model.Venue;
 import com.skypayjm.app.locate.network.NetworkStateChanged;
 import com.skypayjm.app.locate.util.FallbackLocationTracker;
@@ -65,25 +67,26 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public static final int SEARCHQUERY_LENGTH = 3;
     public static final int SPAN_COUNT = 3;
     public static final int SEARCH_STARTPOSITION = 0;
+    public static final String FOURSQUARE_INTENT = "browse";
     private CategoryRecyclerAdapter mCategoryRecyclerAdapter;
     private VenueRecyclerAdapter mVenueRecyclerAdapter;
+    private List<String> selectedIds = new ArrayList<>();
     private List<Category> categories = new ArrayList<>();
     private List<Venue> venues = new ArrayList<>();
+    private List<Venue> searchedResults = new ArrayList<>();
     private SimplePref pref;
     private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     private final String categoriesID = "parentCategoriesID";
     private boolean atBaseCategories;
     private boolean isSearchOpened;
+    private boolean userSelectLocation;
     private Realm realm;
-    private double latitude;
-    private double longitude;
+    private FoursquareLocation searchFoursquareLocation;
+    private double userlatitude;
+    private double userlongitude;
     private GoogleApiClient mGoogleApiClient;
     private int endPosition;
-    private FallbackLocationTracker gps;
-    /**
-     * Represents a geographical location.
-     */
-    protected android.location.Location mLastLocation;
+    protected Location mLastLocation;
     @ViewById
     Toolbar search_toolbar;
     @ViewById
@@ -156,18 +159,20 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             @Override
             public void onItemClickListener(View view, Category category) {
                 if (view.getId() == R.id.ivAddSearch)
-                    addToSearch(searchbox.getSearchText().length() - 1, category.getName());
+                    addToSearch(searchbox.getSearchText().length() - 1, category.getName(), category.getId(), null);
                 goToChildCategory(category);
             }
         });
         mVenueRecyclerAdapter = new VenueRecyclerAdapter(venues, new RecyclerViewListener<Venue>() {
             @Override
             public void onItemClickListener(View view, Venue item) {
+                userSelectLocation = true;
                 if (item.getName().equals("Current Location")) {
                     getCurrentLocation();
-                    addToSearch(endPosition, "me");
-                } else
-                    addToSearch(endPosition, item.getName());
+                    addToSearch(endPosition, "me", "", null);
+                } else {
+                    addToSearch(endPosition, item.getName(), "", item.getFoursquareLocation());
+                }
             }
         });
         RealmConfiguration config1 = new RealmConfiguration.Builder(this)
@@ -186,12 +191,12 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     private void getCurrentLocation() {
         if (mLastLocation == null) {
             // ask if user wants to enable gps location
-            gps = new FallbackLocationTracker(this);
+            FallbackLocationTracker gps = new FallbackLocationTracker(this);
 
             // Check if GPS enabled
             if (gps.hasLocation()) {
-                latitude = gps.getLocation().getLatitude();
-                longitude = gps.getLocation().getLongitude();
+                userlatitude = gps.getLocation().getLatitude();
+                userlongitude = gps.getLocation().getLongitude();
             } else {
                 // Can't get location.
                 // GPS or network is not enabled.
@@ -209,12 +214,21 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 .build();
     }
 
-    private void addToSearch(int endPosition, String s) {
+    private void addToSearch(int endPosition, String item_name, String categoryId, FoursquareLocation foursquareLocation) {
         if (!isSearchOpened) searchbox.toggleSearch();
         String search = searchbox.getSearchText();
-        if (search.length() != 0 && endPosition > 0)
+        Timber.i("inside addToSearch: " + search);
+        if (search.length() != 0 && endPosition > 0) {
             search = search.substring(SEARCH_STARTPOSITION, endPosition).trim() + " ";
-        searchbox.setSearchString(search.concat(s + " "));
+            Timber.i("Search now: " + search);
+        }
+        searchbox.setSearchString(search.concat(item_name).concat(" "));
+        if (!categoryId.equals(""))
+            selectedIds.add(categoryId);
+        if (foursquareLocation != null) searchFoursquareLocation = foursquareLocation;
+        Timber.i("inside addToSearch2: " + searchbox.getSearchText());
+
+        userSelectLocation = false;
     }
 
     private boolean hasNotUpdated(int nDays) {
@@ -244,11 +258,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             public void failure(RetrofitError error) {
 //                if (isDestroyed()) return;
                 Timber.e("Failed to load categories: '%s'", error);
-                String message = "Loading failed :(";
                 try {
                     throw (error.getCause());
-                } catch (FoursquareException e) {
-                    Timber.e("Venue request failed: '%s'", e);
                 } catch (Throwable e) {
                     Timber.e("Venue request failed: '%s'", e);
                 }
@@ -264,7 +275,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             @Override
             public void execute(Realm realm) {
                 for (Category category : categories) {
-                    stringBuilder.append(category.getId() + " ");
+                    stringBuilder.append(category.getId()).append(" ");
                     Category realmCategory = realm.copyToRealmOrUpdate(category);
                     storeIntoCategoryRelationshipDFS(realmCategory);
                 }
@@ -275,7 +286,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
     // Using Depth-First Search as BFS wouldn't have the parent attribute for us to use. And category's depth is pretty shallow so its ok to use DFS
     private void storeIntoCategoryRelationshipDFS(Category realmCategory) {
-        if (realmCategory.getCategories() == null || realmCategory.getCategories().isEmpty())
+        if (realmCategory.getCategories().isEmpty())
             return;
         for (Category child : realmCategory.getCategories()) {
             storeIntoCategoryRelationshipDFS(child);
@@ -296,15 +307,14 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         }
         String[] parentIDs = parentIDstring.split("\\s+");
         if (parentIDs.length > 0) {
-            RealmQuery query = realm.where(Category.class);
+            RealmQuery<Category> query = realm.where(Category.class);
             query = query.equalTo(Category.FIELD_ID, parentIDs[0]);
             for (int i = 1; i < parentIDs.length; i++) {
                 query = query.or();
                 query = query.equalTo(Category.FIELD_ID, parentIDs[i]);
             }
             RealmResults<Category> result = query.findAllSorted(Category.FIELD_NAME);
-            List<Category> tempCategories = new ArrayList<>(result);
-            categories = tempCategories;
+            categories = new ArrayList<>(result);
             display(mCategoryRecyclerAdapter, categories);
         }
 
@@ -377,27 +387,28 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                         }
                     }
                 } else {
+                    if (!userSelectLocation) {
+                        searchFoursquareLocation = null;
+                    }
                     String s = searchbox.getSearchText();
-                    int nearPos = (s.indexOf(NEAR) == -1) ? Integer.MAX_VALUE : s.indexOf(NEAR) + NEAR.length();
-                    int inPos = (s.indexOf(IN) == -1) ? Integer.MAX_VALUE : s.indexOf(IN) + IN.length();
-                    int atPos = (s.indexOf(AT) == -1) ? Integer.MAX_VALUE : s.indexOf(AT) + AT.length();
-                    int aroundPos = (s.indexOf(AROUND) == -1) ? Integer.MAX_VALUE : s.indexOf(AROUND) + AROUND.length();
-                    int minPos = Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
+                    Timber.i("Searched string now is: " + s);
+                    int minPos = getMinimumPosition(s, true);
                     // we get the position to start the autocomplete by getting the position of the location keywords
                     // if we don't find any of the keywords, we switch autocompletemode off.
                     if (minPos == Integer.MAX_VALUE) {
                         autoCompleteModeOn = false;
+                        Timber.i("Displaying categories");
                         display(mCategoryRecyclerAdapter, categories);
                     } else {
                         // update the adapter to display autocomplete results
                         // first get user lastknownlocation and we search from there for autocomplete suggestions
-                        if (latitude != 0.0 && longitude != 0.0) {
+                        if (userlatitude != 0.0 && userlongitude != 0.0) {
                             endPosition = minPos;
                             if (isMinCharLong(minPos, SEARCHQUERY_LENGTH)) {
                                 getFoursquareSuggestLocations(s.substring(minPos));
                             } else {
-                                List<Venue> venues = new ArrayList<>();
-                                Venue currentLocation = Utility.createCurrentVenue(latitude, longitude);
+                                venues = new ArrayList<>();
+                                Venue currentLocation = Utility.createCurrentVenue(userlatitude, userlongitude);
                                 venues.add(currentLocation);
                                 display(mVenueRecyclerAdapter, venues);
                             }
@@ -409,9 +420,26 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             @Override
             public void onSearch(String searchTerm) {
                 Toast.makeText(SearchActivity.this, searchTerm + " Searched", Toast.LENGTH_LONG).show();
-                searchGooglePlaces(searchTerm);
+                searchFoursquare(searchTerm);
             }
         });
+    }
+
+    /**
+     * This is a method which takes in a query and returns either the last position right before the
+     * conjunction or right after the conjunction.
+     *
+     * @param query     This is the string which consists of 3 parts i.e. category, conjunction, location
+     * @param including If including is true, the position returned will be right after the conjunction
+     * @return The ending position of the string which can be used to further process the query
+     */
+    private int getMinimumPosition(String query, boolean including) {
+        Timber.i("Query is: " + query);
+        int nearPos = (!query.contains(NEAR)) ? Integer.MAX_VALUE : (including ? query.indexOf(NEAR) + NEAR.length() : query.indexOf(NEAR));
+        int inPos = (!query.contains(IN)) ? Integer.MAX_VALUE : (including ? query.indexOf(IN) + IN.length() : query.indexOf(IN));
+        int atPos = (!query.contains(AT)) ? Integer.MAX_VALUE : (including ? query.indexOf(AT) + AT.length() : query.indexOf(AT));
+        int aroundPos = (!query.contains(AROUND)) ? Integer.MAX_VALUE : (including ? query.indexOf(AROUND) + AROUND.length() : query.indexOf(AROUND));
+        return Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
     }
 
     private boolean isMinCharLong(int start, int searchqueryLength) {
@@ -420,17 +448,22 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
     @Background
     public void getFoursquareSuggestLocations(String query) {
-        String location = latitude + "," + longitude;
+        String location = userlatitude + "," + userlongitude;
         FoursquareService.Implementation.get().suggestCompletion(location, query, new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {
-                List<Venue> venues = new ArrayList<>();
-                Venue currentLocation = Utility.createCurrentVenue(latitude, longitude);
+                venues = new ArrayList<>();
+                Venue currentLocation = Utility.createCurrentVenue(userlatitude, userlongitude);
                 venues.add(currentLocation);
-                venues.addAll(foursquareResponse.getResponse().getSuggestedVenues());
+                if (foursquareResponse != null) {
+                    ResponseWrapper responseWrapper = foursquareResponse.getResponse();
+                    if (responseWrapper != null && responseWrapper.getSuggestedVenues() != null)
+                        venues.addAll(responseWrapper.getSuggestedVenues());
+                }
                 Timber.i("Got foursquare response: ");
                 for (Venue venue : venues) {
                     Timber.i("\n" + venue.getName());
+                    Timber.i("Coordinates: " + venue.getFoursquareLocation().getLat() + "," + venue.getFoursquareLocation().getLng());
                 }
                 display(mVenueRecyclerAdapter, venues);
             }
@@ -439,11 +472,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             public void failure(RetrofitError error) {
 //                if (isDestroyed()) return;
                 Timber.e("Failed to load suggested locations: '%s'", error);
-                String message = "Loading failed :(";
                 try {
                     throw (error.getCause());
-                } catch (FoursquareException e) {
-                    Timber.e("Venue request failed: '%s'", e);
                 } catch (Throwable e) {
                     Timber.e("Venue request failed: '%s'", e);
                 }
@@ -451,13 +481,73 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         });
     }
 
-    private void searchGooglePlaces(String searchTerm) {
+    @Background
+    public void searchFoursquare(final String searchTerm) {
 
+        String location = userlatitude + "," + userlongitude;
+        int radius = 5000;
+        String query = "";
+        String categoryIds = "";
+
+        /*
+            Several use cases on searching:
+            1.	User selected a suggestion
+                    *have to check if user deletes it after selecting (use searchFoursquareLocation which switch back to null when search term changes)
+            2.	User never select from suggestion
+                2.1	User input a location and there's suggest completion result, we select the first result
+                2.2 User input a location but there's no result, we use user's current location and make it search a wider radius
+                2.3 User did not input a location, same as use case 2.
+        */
+        // This means user selected a suggestion and never deletes it
+        if (searchFoursquareLocation != null) {
+            location = searchFoursquareLocation.getLat() + "," + searchFoursquareLocation.getLng();
+        } else if (!venues.isEmpty() && venues.size() > 1) {
+            double lat = venues.get(1).getFoursquareLocation().getLat();
+            double lng = venues.get(1).getFoursquareLocation().getLng();
+            location = lat + "," + lng;
+            Timber.i("Venues is not empty." + location);
+        } else {
+            radius = 20000;
+        }
+        // If user does not select any category, we will search from the input string directly
+        if (selectedIds == null || selectedIds.isEmpty()) {
+            query = searchTerm.substring(0, getMinimumPosition(query, false));
+        } else {
+            categoryIds = selectedIds.get(0);
+            for (int index = 1; index < selectedIds.size(); index++) {
+                categoryIds = categoryIds + "," + selectedIds.get(index);
+            }
+        }
+        Timber.i("Yishun MRT: " + location);
+        FoursquareService.Implementation.get().search(location, radius, query, categoryIds, FOURSQUARE_INTENT, new Callback<FoursquareResponse>() {
+            @Override
+            public void success(FoursquareResponse foursquareResponse, Response response) {
+                if (foursquareResponse != null) {
+                    ResponseWrapper responseWrapper = foursquareResponse.getResponse();
+                    if (responseWrapper != null && responseWrapper.getSearchedVenues() != null)
+                        searchedResults.addAll(responseWrapper.getSearchedVenues());
+                }
+                Timber.i("Got foursquare response: ");
+                for (Venue venue : searchedResults) {
+                    Timber.i("\n" + venue.getName());
+                }
+                goToResults(searchTerm);
+            }
+
+            @Override
+            public void failure(RetrofitError error) {
+
+            }
+        });
+    }
+
+    private void goToResults(String searchTerm) {
         //if search successful, setresult ok with bundle data and finish this activity
 
 //        setResult(RESULT_OK);
-        ResultsActivity_.intent(this).extra("searchterm", searchTerm).start();
-        Utility.hide_keyboard(this);
+        // Pass the searchedResults over as well
+        ResultsActivity_.intent(SearchActivity.this).extra("searchterm", searchTerm).start();
+        Utility.hide_keyboard(SearchActivity.this);
         realm.close();
         finish();
     }
@@ -502,8 +592,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
                 mGoogleApiClient);
         if (mLastLocation != null) {
-            latitude = mLastLocation.getLatitude();
-            longitude = mLastLocation.getLongitude();
+            userlatitude = mLastLocation.getLatitude();
+            userlongitude = mLastLocation.getLongitude();
         }
     }
 
