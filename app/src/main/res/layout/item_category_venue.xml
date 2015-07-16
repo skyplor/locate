@@ -33,7 +33,7 @@
             android:transitionName="name" />
 
         <ImageView
-            android:id="@+id/ivAddCategory"
+            android:id="@+id/ivAddSearch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"

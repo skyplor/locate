@@ -1,4 +1,4 @@
-package com.skypayjm.app.locate.api;
+package com.skypayjm.app.locate.api.Foursquare;
 
 import retrofit.ErrorHandler;
 import retrofit.RetrofitError;

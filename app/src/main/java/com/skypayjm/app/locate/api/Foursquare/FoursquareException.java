@@ -1,4 +1,4 @@
-package com.skypayjm.app.locate.api;
+package com.skypayjm.app.locate.api.Foursquare;
 
 /**
  * Created by Sky on 14/7/2015.

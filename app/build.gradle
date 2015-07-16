@@ -38,6 +38,7 @@ dependencies {
     compile 'io.realm:realm-android:0.81.1'
     compile 'com.github.dmytrodanylyk.realm-browser:library:0.0.3'
     compile 'ru.noties.simpleprefs:core:0.9.9'
+    compile 'de.greenrobot:eventbus:3.0.0-beta1'
     testCompile 'junit:junit:4.12'
     testCompile('org.robolectric:robolectric:3.0-rc2') {
         exclude group: 'commons-logging', module: 'commons-logging'

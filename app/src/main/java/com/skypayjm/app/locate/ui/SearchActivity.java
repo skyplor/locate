@@ -2,6 +2,7 @@ package com.skypayjm.app.locate.ui;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -11,15 +12,24 @@ import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.widget.Toast;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationServices;
 import com.quinny898.library.persistentsearch.SearchBox;
 import com.skypayjm.app.locate.R;
+import com.skypayjm.app.locate.adapter.BaseRecyclerAdapter;
 import com.skypayjm.app.locate.adapter.CategoryRecyclerAdapter;
-import com.skypayjm.app.locate.api.FoursquareException;
-import com.skypayjm.app.locate.api.FoursquareResponse;
-import com.skypayjm.app.locate.api.FoursquareService;
+import com.skypayjm.app.locate.adapter.RecyclerViewListener;
+import com.skypayjm.app.locate.adapter.VenueRecyclerAdapter;
+import com.skypayjm.app.locate.api.Foursquare.FoursquareException;
+import com.skypayjm.app.locate.api.Foursquare.FoursquareResponse;
+import com.skypayjm.app.locate.api.Foursquare.FoursquareService;
 import com.skypayjm.app.locate.db.Migration;
 import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
+import com.skypayjm.app.locate.model.Venue;
+import com.skypayjm.app.locate.network.NetworkStateChanged;
+import com.skypayjm.app.locate.util.FallbackLocationTracker;
 import com.skypayjm.app.locate.util.Utility;
 
 import org.androidannotations.annotations.AfterViews;
@@ -33,6 +43,8 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
 
+import de.greenrobot.event.EventBus;
+import de.greenrobot.event.Subscribe;
 import io.realm.Realm;
 import io.realm.RealmConfiguration;
 import io.realm.RealmQuery;
@@ -44,40 +56,118 @@ import ru.noties.simpleprefs.SimplePref;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_search)
-public class SearchActivity extends AppCompatActivity {
+public class SearchActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
-    private CategoryRecyclerAdapter mRecyclerAdapter;
+    public static final String NEAR = " near ";
+    public static final String IN = " in ";
+    public static final String AT = " at ";
+    public static final String AROUND = " around ";
+    public static final int SEARCHQUERY_LENGTH = 3;
+    public static final int SPAN_COUNT = 3;
+    public static final int SEARCH_STARTPOSITION = 0;
+    private CategoryRecyclerAdapter mCategoryRecyclerAdapter;
+    private VenueRecyclerAdapter mVenueRecyclerAdapter;
     private List<Category> categories = new ArrayList<>();
+    private List<Venue> venues = new ArrayList<>();
     private SimplePref pref;
     private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     private final String categoriesID = "parentCategoriesID";
     private boolean atBaseCategories;
     private boolean isSearchOpened;
     private Realm realm;
+    private double latitude;
+    private double longitude;
+    private GoogleApiClient mGoogleApiClient;
+    private int endPosition;
+    private FallbackLocationTracker gps;
+    /**
+     * Represents a geographical location.
+     */
+    protected android.location.Location mLastLocation;
     @ViewById
     Toolbar search_toolbar;
     @ViewById
     RecyclerView category_resultList;
     @ViewById
     SearchBox searchbox;
+    private boolean autoCompleteModeOn;
+
+    @Override
+    public void onPause() {
+        Utility.hide_keyboard(this);
+        super.onPause();
+    }
+
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        EventBus.getDefault().unregister(this); // unregister EventBus
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == SearchBox.VOICE_RECOGNITION_CODE && resultCode == RESULT_OK) {
+            ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            searchbox.populateEditText(matches);
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (atBaseCategories) {
+            setResult(RESULT_CANCELED);
+            realm.close();
+            finish();
+        } else {
+            showParentCategories();
+        }
+    }
 
     @AfterViews
     void init() {
         setSupportActionBar(search_toolbar);
         initializeSearchbox();
+        EventBus.getDefault().register(this); // register EventBus
 
         atBaseCategories = true;
         category_resultList.setHasFixedSize(true);
         // Define 3 column grid layout
-        final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, 3);
+        final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, SPAN_COUNT);
         category_resultList.setLayoutManager(layout);
         pref = new SimplePref(this, "LocatePref");
-        mRecyclerAdapter = new CategoryRecyclerAdapter(categories, new CategoryRecyclerAdapter.RecyclerViewListener() {
+        buildGoogleApiClient();
+        mCategoryRecyclerAdapter = new CategoryRecyclerAdapter(categories, new RecyclerViewListener<Category>() {
             @Override
             public void onItemClickListener(View view, Category category) {
-                if (view.getId() == R.id.ivAddCategory)
-                    addCategoryToSearch(category);
+                if (view.getId() == R.id.ivAddSearch)
+                    addToSearch(searchbox.getSearchText().length() - 1, category.getName());
                 goToChildCategory(category);
+            }
+        });
+        mVenueRecyclerAdapter = new VenueRecyclerAdapter(venues, new RecyclerViewListener<Venue>() {
+            @Override
+            public void onItemClickListener(View view, Venue item) {
+                if (item.getName().equals("Current Location")) {
+                    getCurrentLocation();
+                    addToSearch(endPosition, "me");
+                } else
+                    addToSearch(endPosition, item.getName());
             }
         });
         RealmConfiguration config1 = new RealmConfiguration.Builder(this)
@@ -86,16 +176,45 @@ public class SearchActivity extends AppCompatActivity {
                 .build();
 
         realm = Realm.getInstance(config1);
-        category_resultList.setAdapter(mRecyclerAdapter);
+        category_resultList.setAdapter(mCategoryRecyclerAdapter);
         // Only update once a week
         if (hasNotUpdated(-7))
             getFoursquareCategories();
         else loadBaseCategories();
     }
 
-    private void addCategoryToSearch(Category category) {
+    private void getCurrentLocation() {
+        if (mLastLocation == null) {
+            // ask if user wants to enable gps location
+            gps = new FallbackLocationTracker(this);
+
+            // Check if GPS enabled
+            if (gps.hasLocation()) {
+                latitude = gps.getLocation().getLatitude();
+                longitude = gps.getLocation().getLongitude();
+            } else {
+                // Can't get location.
+                // GPS or network is not enabled.
+                // Ask user to enable GPS/network in settings.
+                Utility.showSettingsAlert(this);
+            }
+        }
+    }
+
+    protected synchronized void buildGoogleApiClient() {
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build();
+    }
+
+    private void addToSearch(int endPosition, String s) {
         if (!isSearchOpened) searchbox.toggleSearch();
-        searchbox.setSearchString(searchbox.getSearchText().concat(category.getName() + " "));
+        String search = searchbox.getSearchText();
+        if (search.length() != 0 && endPosition > 0)
+            search = search.substring(SEARCH_STARTPOSITION, endPosition).trim() + " ";
+        searchbox.setSearchString(search.concat(s + " "));
     }
 
     private boolean hasNotUpdated(int nDays) {
@@ -186,14 +305,17 @@ public class SearchActivity extends AppCompatActivity {
             RealmResults<Category> result = query.findAllSorted(Category.FIELD_NAME);
             List<Category> tempCategories = new ArrayList<>(result);
             categories = tempCategories;
-            displayCategories();
+            display(mCategoryRecyclerAdapter, categories);
         }
 
     }
 
-    public void displayCategories() {
-        mRecyclerAdapter.updateItems(categories);
-        mRecyclerAdapter.notifyDataSetChanged();
+    public void display(BaseRecyclerAdapter mRecyclerAdapter, List items) {
+        if (items != null && !items.isEmpty()) {
+            mRecyclerAdapter.updateItems(items);
+            category_resultList.setAdapter(mRecyclerAdapter);
+            mRecyclerAdapter.notifyDataSetChanged();
+        }
     }
 
     private void updateSharedPref(long timeUpdated) {
@@ -205,7 +327,7 @@ public class SearchActivity extends AppCompatActivity {
         if (!subcategories.isEmpty()) {
             atBaseCategories = false;
             categories = subcategories;
-            displayCategories();
+            display(mCategoryRecyclerAdapter, categories);
         }
     }
 
@@ -238,11 +360,49 @@ public class SearchActivity extends AppCompatActivity {
             public void onSearchTermChanged() {
                 // We will show suggestions by grabbing the last word and see if it matches the list of words.
                 // If yes, we show the suggestions relating to that word
-                String s = searchbox.getSearchText();
-                if (s.length() > 0 && s.substring(s.length() - 1).equals(" ")) {
-                    String[] strArray = s.replaceAll("[^a-zA-Z ]", "").toLowerCase().split("\\s+");
-                    if (strArray.length > 0)
-                        Timber.i("Last word is '%s'", strArray[strArray.length - 1]);
+                if (!autoCompleteModeOn) {
+                    String s = searchbox.getSearchText();
+                    if (s.length() > 0 && s.substring(s.length() - 1).equals(" ")) {
+                        String[] strArray = s.replaceAll("[^a-zA-Z ]", "").toLowerCase().split("\\s+");
+                        if (strArray.length > 0) {
+                            Timber.i("Last word is '%s'", strArray[strArray.length - 1]);
+                            //if last word is location keywords e.g. in/near/around/at
+                            // autocomplete mode on and we send the words after that to foursquare api.
+                            if (strArray[strArray.length - 1].equalsIgnoreCase("near") ||
+                                    strArray[strArray.length - 1].equalsIgnoreCase("in") ||
+                                    strArray[strArray.length - 1].equalsIgnoreCase("at") ||
+                                    strArray[strArray.length - 1].equalsIgnoreCase("around")) {
+                                autoCompleteModeOn = true;
+                            }
+                        }
+                    }
+                } else {
+                    String s = searchbox.getSearchText();
+                    int nearPos = (s.indexOf(NEAR) == -1) ? Integer.MAX_VALUE : s.indexOf(NEAR) + NEAR.length();
+                    int inPos = (s.indexOf(IN) == -1) ? Integer.MAX_VALUE : s.indexOf(IN) + IN.length();
+                    int atPos = (s.indexOf(AT) == -1) ? Integer.MAX_VALUE : s.indexOf(AT) + AT.length();
+                    int aroundPos = (s.indexOf(AROUND) == -1) ? Integer.MAX_VALUE : s.indexOf(AROUND) + AROUND.length();
+                    int minPos = Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
+                    // we get the position to start the autocomplete by getting the position of the location keywords
+                    // if we don't find any of the keywords, we switch autocompletemode off.
+                    if (minPos == Integer.MAX_VALUE) {
+                        autoCompleteModeOn = false;
+                        display(mCategoryRecyclerAdapter, categories);
+                    } else {
+                        // update the adapter to display autocomplete results
+                        // first get user lastknownlocation and we search from there for autocomplete suggestions
+                        if (latitude != 0.0 && longitude != 0.0) {
+                            endPosition = minPos;
+                            if (isMinCharLong(minPos, SEARCHQUERY_LENGTH)) {
+                                getFoursquareSuggestLocations(s.substring(minPos));
+                            } else {
+                                List<Venue> venues = new ArrayList<>();
+                                Venue currentLocation = Utility.createCurrentVenue(latitude, longitude);
+                                venues.add(currentLocation);
+                                display(mVenueRecyclerAdapter, venues);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -250,6 +410,43 @@ public class SearchActivity extends AppCompatActivity {
             public void onSearch(String searchTerm) {
                 Toast.makeText(SearchActivity.this, searchTerm + " Searched", Toast.LENGTH_LONG).show();
                 searchGooglePlaces(searchTerm);
+            }
+        });
+    }
+
+    private boolean isMinCharLong(int start, int searchqueryLength) {
+        return searchbox.getSearchText().length() - start >= searchqueryLength;
+    }
+
+    @Background
+    public void getFoursquareSuggestLocations(String query) {
+        String location = latitude + "," + longitude;
+        FoursquareService.Implementation.get().suggestCompletion(location, query, new Callback<FoursquareResponse>() {
+            @Override
+            public void success(FoursquareResponse foursquareResponse, Response response) {
+                List<Venue> venues = new ArrayList<>();
+                Venue currentLocation = Utility.createCurrentVenue(latitude, longitude);
+                venues.add(currentLocation);
+                venues.addAll(foursquareResponse.getResponse().getSuggestedVenues());
+                Timber.i("Got foursquare response: ");
+                for (Venue venue : venues) {
+                    Timber.i("\n" + venue.getName());
+                }
+                display(mVenueRecyclerAdapter, venues);
+            }
+
+            @Override
+            public void failure(RetrofitError error) {
+//                if (isDestroyed()) return;
+                Timber.e("Failed to load suggested locations: '%s'", error);
+                String message = "Loading failed :(";
+                try {
+                    throw (error.getCause());
+                } catch (FoursquareException e) {
+                    Timber.e("Venue request failed: '%s'", e);
+                } catch (Throwable e) {
+                    Timber.e("Venue request failed: '%s'", e);
+                }
             }
         });
     }
@@ -267,26 +464,6 @@ public class SearchActivity extends AppCompatActivity {
 
     private void setSearchDrawerLogo(int drawerLogo) {
         searchbox.setDrawerLogo(ContextCompat.getDrawable(this, drawerLogo));
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == SearchBox.VOICE_RECOGNITION_CODE && resultCode == RESULT_OK) {
-            ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            searchbox.populateEditText(matches);
-        }
-        super.onActivityResult(requestCode, resultCode, data);
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (atBaseCategories) {
-            setResult(RESULT_CANCELED);
-            realm.close();
-            finish();
-        } else {
-            showParentCategories();
-        }
     }
 
     private void showParentCategories() {
@@ -314,15 +491,41 @@ public class SearchActivity extends AppCompatActivity {
                     parentCategories.add(categoryRelationship.getChildCategory());
                 }
                 categories = parentCategories;
-                displayCategories();
+                display(mCategoryRecyclerAdapter, categories);
 
             }
         }
     }
 
     @Override
-    public void onPause() {
-        Utility.hide_keyboard(this);
-        super.onPause();
+    public void onConnected(Bundle connectionHint) {
+        mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
+                mGoogleApiClient);
+        if (mLastLocation != null) {
+            latitude = mLastLocation.getLatitude();
+            longitude = mLastLocation.getLongitude();
+        }
+    }
+
+    @Override
+    public void onConnectionSuspended(int cause) {
+        // The connection to Google Play services was lost for some reason. We call connect() to
+        // attempt to re-establish the connection.
+        Timber.i("Connection suspended");
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Timber.i("Connection failed: ConnectionResult.getErrorCode() = " + connectionResult.getErrorCode());
+    }
+
+    @Subscribe
+    // method that will be called when someone posts an event NetworkStateChanged
+    public void onEventMainThread(NetworkStateChanged event) {
+        if (!event.isInternetConnected()) {
+            Toast.makeText(this, "No Internet connection!", Toast.LENGTH_SHORT).show();
+            Timber.i("No Internet connection");
+        }
     }
 }

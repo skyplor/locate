@@ -1,4 +1,4 @@
-package com.skypayjm.app.locate.api;
+package com.skypayjm.app.locate.api.Foursquare;
 
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
@@ -10,6 +10,7 @@ import retrofit.Callback;
 import retrofit.RestAdapter;
 import retrofit.converter.GsonConverter;
 import retrofit.http.GET;
+import retrofit.http.Query;
 
 /**
  * Created by Sky on 14/7/2015.
@@ -20,9 +21,15 @@ public interface FoursquareService {
     @GET("/venues/categories")
     FoursquareResponse venuesCategories() throws FoursquareException;
 
+    @GET("/venues/suggestcompletion")
+    void suggestCompletion(@Query(value = "ll", encodeValue = false) String location, @Query("query") String query) throws FoursquareException;
+
     //Non-blocking, asynchronous
     @GET("/venues/categories")
     void venuesCategories(Callback<FoursquareResponse> callback);
+
+    @GET("/venues/suggestcompletion")
+    void suggestCompletion(@Query(value = "ll", encodeValue = false) String location, @Query("query") String query, Callback<FoursquareResponse> callback);
 
     class Implementation {
         public static FoursquareService get() {

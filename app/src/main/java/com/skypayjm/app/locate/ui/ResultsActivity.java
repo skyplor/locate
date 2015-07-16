@@ -23,6 +23,7 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.places.Places;
 import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.model.Category;
+import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.model.Icon;
 
 import org.androidannotations.annotations.AfterViews;
@@ -73,6 +74,17 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         fragmentTransaction.add(R.id.fragment_container, new ResultMapFragment_(), TAG_MAP);
         fragmentTransaction.add(R.id.fragment_container, new ResultListFragment_(), TAG_LIST);
         fragmentTransaction.commit();
+        buildGoogleApiClient();
+        tvSearch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SearchActivity_.intent(ResultsActivity.this).startForResult(REQUEST_SEARCH);
+            }
+        });
+        RealmBrowser.getInstance().addRealmModel(Category.class, Icon.class, CategoryRelationship.class);
+    }
+
+    protected synchronized void buildGoogleApiClient() {
         mGoogleApiClient = new GoogleApiClient
                 .Builder(this)
                 .addApi(Places.GEO_DATA_API)
@@ -80,13 +92,6 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .build();
-        tvSearch.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                SearchActivity_.intent(ResultsActivity.this).startForResult(REQUEST_SEARCH);
-            }
-        });
-        RealmBrowser.getInstance().addRealmModel(Category.class, Icon.class);
     }
 
     @Override
@@ -138,7 +143,7 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     }
 
     @OptionsItem
-    void action_realm_dbSelected(){
+    void action_realm_dbSelected() {
         RealmFilesActivity.start(this);
     }
 
@@ -271,8 +276,10 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
 
     @Override
     protected void onStop() {
-        mGoogleApiClient.disconnect();
         super.onStop();
+        if (mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
+        }
     }
 
     @Override

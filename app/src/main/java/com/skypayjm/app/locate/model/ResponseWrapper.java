@@ -11,6 +11,8 @@ import java.util.List;
  */
 public class ResponseWrapper {
     public static final String FIELD_CATEGORIES = "categories";
+    public static final String FIELD_MINIVENUES = "minivenues";
+    public static final String FIELD_VENUES = "venues";
 
     @SerializedName(FIELD_CATEGORIES)
     @Nullable
@@ -19,5 +21,23 @@ public class ResponseWrapper {
     @Nullable
     public List<Category> getCategories() {
         return categories;
+    }
+
+    @SerializedName(FIELD_MINIVENUES)
+    @Nullable
+    private List<Venue> suggestedVenues;
+
+    @Nullable
+    public List<Venue> getSuggestedVenues() {
+        return suggestedVenues;
+    }
+
+    @SerializedName(FIELD_VENUES)
+    @Nullable
+    private List<Venue> searchedVenues;
+
+    @Nullable
+    public List<Venue> getSearchedVenues() {
+        return searchedVenues;
     }
 }

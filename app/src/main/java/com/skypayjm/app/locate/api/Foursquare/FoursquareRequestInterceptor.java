@@ -1,4 +1,4 @@
-package com.skypayjm.app.locate.api;
+package com.skypayjm.app.locate.api.Foursquare;
 
 import com.skypayjm.app.locate.LocateApplication_;
 import com.skypayjm.app.locate.R;

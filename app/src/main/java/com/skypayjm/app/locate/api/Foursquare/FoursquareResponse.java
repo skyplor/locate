@@ -1,4 +1,4 @@
-package com.skypayjm.app.locate.api;
+package com.skypayjm.app.locate.api.Foursquare;
 
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;

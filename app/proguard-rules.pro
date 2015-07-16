@@ -20,3 +20,8 @@
 -keep @io.realm.annotations.RealmModule class *
 -dontwarn javax.**
 -dontwarn io.realm.**
+
+# For Eventbus
+-keepclassmembers class ** {
+    public void onEvent*(**);
+}
