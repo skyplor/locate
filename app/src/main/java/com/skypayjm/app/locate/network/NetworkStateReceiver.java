@@ -36,9 +36,9 @@ public class NetworkStateReceiver extends BroadcastReceiver {
         } else if (intent.getBooleanExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, Boolean.FALSE)) {
             connected = false;
             // no Internet connection, send network state changed
-            EventBus.getDefault().post(new NetworkStateChanged(false));
+            EventBus.getDefault().postSticky(new NetworkStateChanged(false));
         } else {
-            EventBus.getDefault().post(new NetworkStateChanged(false));
+            EventBus.getDefault().postSticky(new NetworkStateChanged(false));
         }
 
         notifyStateToAll();

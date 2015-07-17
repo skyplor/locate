@@ -26,6 +26,8 @@ import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.model.Icon;
+import com.skypayjm.app.locate.model.ResultEvent;
+import com.skypayjm.app.locate.model.Venue;
 
 import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.EActivity;
@@ -34,6 +36,9 @@ import org.androidannotations.annotations.OptionsMenu;
 import org.androidannotations.annotations.OptionsMenuItem;
 import org.androidannotations.annotations.ViewById;
 
+import java.util.List;
+
+import de.greenrobot.event.EventBus;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_main)
@@ -41,17 +46,20 @@ import timber.log.Timber;
 public class ResultsActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG_MAP = "MAP", TAG_LIST = "LIST";
-    private boolean isMapMode;
-    private GoogleApiClient mGoogleApiClient;
-
+    private static final String STATE_RESOLVING_ERROR = "resolving_error";
+    private static final String DIALOG_ERROR = "dialog_error";
     // Request code to use when launching the resolution activity and search activity
     private static final int REQUEST_RESOLVE_ERROR = 1001, REQUEST_SEARCH = 1000;
+
+    private GoogleApiClient mGoogleApiClient;
+
     // Unique tag for the error dialog fragment
-    private static final String DIALOG_ERROR = "dialog_error";
     // Bool to track whether the app is already resolving an error
-    private boolean mResolvingError = false;
-    private boolean isListResultEnabled = false;
-    private static final String STATE_RESOLVING_ERROR = "resolving_error";
+    private boolean mResolvingError;
+    private boolean isListResultEnabled;
+    private boolean isMapMode;
+
+    private ResultEvent resultEvent;
 
     @ViewById
     Toolbar main_toolbar;
@@ -67,10 +75,90 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         mResolvingError = savedInstanceState != null && savedInstanceState.getBoolean(STATE_RESOLVING_ERROR, false);
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (!mResolvingError) {
+            mGoogleApiClient.connect();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(STATE_RESOLVING_ERROR, mResolvingError);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_SEARCH) {
+            if (resultCode == RESULT_OK) {
+                // We populate the results and display
+                isListResultEnabled = true;
+                invalidateOptionsMenu();
+                displayResult();
+            } else {
+                isListResultEnabled = false;
+                invalidateOptionsMenu();
+            }
+        } else if (requestCode == REQUEST_RESOLVE_ERROR) {
+            mResolvingError = false;
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mGoogleApiClient.isConnecting() &&
+                        !mGoogleApiClient.isConnected()) {
+                    mGoogleApiClient.connect();
+                }
+            }
+        }
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    protected void onPause() {
+        EventBus.getDefault().unregister(this); // unregister EventBus
+        super.onPause();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        EventBus.getDefault().register(this);
+        if (this.isMapMode) {
+            switchToMap();
+        } else {
+            switchToList();
+        }
+    }
+
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+
+        if (isListResultEnabled) {
+            action_map_list.setEnabled(true);
+            action_map_list.getIcon().setAlpha(255);
+        } else {
+            // disabled
+            action_map_list.setEnabled(false);
+            action_map_list.getIcon().setAlpha(130);
+        }
+        return super.onPrepareOptionsMenu(menu);
+    }
+
+
     @AfterViews
     protected void init() {
         setSupportActionBar(main_toolbar);
         isMapMode = true;
+        getEvent();
         FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
         fragmentTransaction.add(R.id.fragment_container, new ResultMapFragment_(), TAG_MAP);
         fragmentTransaction.add(R.id.fragment_container, new ResultListFragment_(), TAG_LIST);
@@ -93,29 +181,6 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .build();
-    }
-
-    @Override
-    public boolean onPrepareOptionsMenu(Menu menu) {
-
-        if (isListResultEnabled) {
-            action_map_list.setEnabled(true);
-            action_map_list.getIcon().setAlpha(255);
-        } else {
-            // disabled
-            action_map_list.setEnabled(false);
-            action_map_list.getIcon().setAlpha(130);
-        }
-        return super.onPrepareOptionsMenu(menu);
-    }
-
-    public void onResume() {
-        super.onResume();
-        if (this.isMapMode) {
-            switchToMap();
-        } else {
-            switchToList();
-        }
     }
 
     private void displayResult() {
@@ -166,31 +231,6 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         fragmentTransaction.addToBackStack(null);
         fragmentTransaction.commitAllowingStateLoss();
         getSupportFragmentManager().executePendingTransactions();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_SEARCH) {
-            if (resultCode == RESULT_OK) {
-                // We populate the results and display
-                isListResultEnabled = true;
-                invalidateOptionsMenu();
-                displayResult();
-            } else {
-                isListResultEnabled = false;
-                invalidateOptionsMenu();
-            }
-        } else if (requestCode == REQUEST_RESOLVE_ERROR) {
-            mResolvingError = false;
-            if (resultCode == RESULT_OK) {
-                // Make sure the app is not already connected or attempting to connect
-                if (!mGoogleApiClient.isConnecting() &&
-                        !mGoogleApiClient.isConnected()) {
-                    mGoogleApiClient.connect();
-                }
-            }
-        }
-        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -267,26 +307,24 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         }
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (!mResolvingError) {
-            mGoogleApiClient.connect();
+    public void getEvent(){
+        ResultEvent resultEvent = EventBus.getDefault().getStickyEvent(ResultEvent.class);
+        tvSearch.setText(resultEvent.getSearchTerm());
+        List<Venue> venues = resultEvent.getResults();
+        for (Venue venue : venues) {
+            Timber.i(venue.getName());
         }
     }
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mGoogleApiClient.isConnected()) {
-            mGoogleApiClient.disconnect();
+//    @Subscribe(threadMode = ThreadMode.MainThread)
+    // This method will be called when a ResultEvent is posted
+    public void onEvent(ResultEvent event) {
+        resultEvent = EventBus.getDefault().removeStickyEvent(ResultEvent.class);
+        tvSearch.setText(resultEvent.getSearchTerm());
+        List<Venue> venues = resultEvent.getResults();
+        for (Venue venue : venues) {
+            Timber.i(venue.getName());
         }
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putBoolean(STATE_RESOLVING_ERROR, mResolvingError);
     }
 
 }

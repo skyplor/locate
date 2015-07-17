@@ -29,6 +29,7 @@ import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.model.FoursquareLocation;
 import com.skypayjm.app.locate.model.ResponseWrapper;
+import com.skypayjm.app.locate.model.ResultEvent;
 import com.skypayjm.app.locate.model.Venue;
 import com.skypayjm.app.locate.network.NetworkStateChanged;
 import com.skypayjm.app.locate.util.FallbackLocationTracker;
@@ -46,7 +47,6 @@ import java.util.GregorianCalendar;
 import java.util.List;
 
 import de.greenrobot.event.EventBus;
-import de.greenrobot.event.Subscribe;
 import io.realm.Realm;
 import io.realm.RealmConfiguration;
 import io.realm.RealmQuery;
@@ -98,9 +98,15 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     @Override
     public void onPause() {
         Utility.hide_keyboard(this);
+        EventBus.getDefault().unregister(this); // unregister EventBus
         super.onPause();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        EventBus.getDefault().register(this);
+    }
 
     @Override
     protected void onStart() {
@@ -114,12 +120,6 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         if (mGoogleApiClient.isConnected()) {
             mGoogleApiClient.disconnect();
         }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        EventBus.getDefault().unregister(this); // unregister EventBus
     }
 
     @Override
@@ -144,6 +144,11 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
     @AfterViews
     void init() {
+        NetworkStateChanged networkStateChanged = EventBus.getDefault().getStickyEvent(NetworkStateChanged.class);
+        if (networkStateChanged != null && !networkStateChanged.isInternetConnected()) {
+            Toast.makeText(this, "No Internet connection!", Toast.LENGTH_SHORT).show();
+            Timber.i("No Internet connection");
+        }
         setSupportActionBar(search_toolbar);
         initializeSearchbox();
         EventBus.getDefault().register(this); // register EventBus
@@ -547,9 +552,15 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     private void goToResults(String searchTerm) {
         //if search successful, setresult ok with bundle data and finish this activity
 
-//        setResult(RESULT_OK);
+        setResult(RESULT_OK);
         // Pass the searchedResults over as well
-        ResultsActivity_.intent(SearchActivity.this).extra("searchterm", searchTerm).start();
+        ResultEvent resultEvent = new ResultEvent();
+        resultEvent.setResults(searchedResults);
+        resultEvent.setSearchTerm(searchTerm);
+        EventBus.getDefault().postSticky(resultEvent);
+        ResultsActivity_.intent(SearchActivity.this).start();
+//        Intent intent = new Intent(this, TestActivity.class);
+//        startActivity(intent);
         Utility.hide_keyboard(SearchActivity.this);
         realm.close();
         finish();
@@ -613,7 +624,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         Timber.i("Connection failed: ConnectionResult.getErrorCode() = " + connectionResult.getErrorCode());
     }
 
-    @Subscribe
+    //    @Subscribe(threadMode = ThreadMode.MainThread)
     // method that will be called when someone posts an event NetworkStateChanged
     public void onEventMainThread(NetworkStateChanged event) {
         if (!event.isInternetConnected()) {
