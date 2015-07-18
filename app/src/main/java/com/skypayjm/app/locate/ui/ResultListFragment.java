@@ -9,9 +9,8 @@ import android.view.View;
 import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.adapter.RecyclerViewListener;
 import com.skypayjm.app.locate.adapter.VenueListRecyclerAdapter;
-import com.skypayjm.app.locate.model.ResultEvent;
 import com.skypayjm.app.locate.model.Venue;
-import com.skypayjm.app.locate.model.VenueDetailsEvent;
+import com.skypayjm.app.locate.model.event.ResultEvent;
 
 import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.EFragment;
@@ -33,6 +32,7 @@ public class ResultListFragment extends Fragment {
     RecyclerView search_resultList;
     private VenueListRecyclerAdapter mVenueListRecyclerAdapter;
     private List<Venue> venueList;
+    private ResultsActivity resultsActivity;
 
     public ResultListFragment() {
         // Required empty public constructor
@@ -55,6 +55,7 @@ public class ResultListFragment extends Fragment {
     void init() {
         bus = EventBus.getDefault();
         venueList = new ArrayList<>();
+        resultsActivity = (ResultsActivity_) getActivity();
         setUpRecyclerView();
     }
 
@@ -88,10 +89,8 @@ public class ResultListFragment extends Fragment {
         mVenueListRecyclerAdapter = new VenueListRecyclerAdapter(venueList, new RecyclerViewListener<Venue>() {
             @Override
             public void onItemClickListener(View view, Venue item) {
-                VenueActivity_.intent(getActivity()).start();
-                VenueDetailsEvent venueDetailsEvent = new VenueDetailsEvent();
-                venueDetailsEvent.setVenue(item);
-                bus.postSticky(venueDetailsEvent);
+                resultsActivity.showProgressDialog();
+                resultsActivity.getFoursquareVenue(item.getId());
             }
         });
     }

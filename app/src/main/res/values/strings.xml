@@ -10,5 +10,5 @@
     <string name="title_activity_search">Search</string>
     <string name="menu_item_search">Search</string>
     <string name="title_activity_venue">Venue</string>
-    <string name="no_results_msg">Sorry, but nothing matched your search criteria. Please try again with some different keywords.</string>
+    <string name="no_results_msg">Sorry, but nothing matched your search criteria. Please try again with some different keywords or tap on the nearest suggested places.</string>
 </resources>

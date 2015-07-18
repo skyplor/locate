@@ -1,4 +1,6 @@
-package com.skypayjm.app.locate.model;
+package com.skypayjm.app.locate.model.event;
+
+import com.skypayjm.app.locate.model.Venue;
 
 import java.util.List;
 

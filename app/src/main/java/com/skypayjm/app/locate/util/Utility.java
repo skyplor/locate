@@ -72,4 +72,12 @@ public class Utility {
     public static long getCurrentDateTime() {
         return System.currentTimeMillis();
     }
+
+    public static String isNullorEmpty(Object object) {
+        if ((object instanceof String && object != null && !((String) object).isEmpty())
+                || (!(object instanceof String) && object != null))
+            return object.toString();
+
+        return "Not available";
+    }
 }

@@ -44,10 +44,10 @@ public class ResponseWrapper {
 
     @SerializedName(FIELD_VENUE)
     @Nullable
-    private VenueDetail venueDetail;
+    private FoursquareVenueDetail foursquareVenueDetail;
 
     @Nullable
-    public VenueDetail getVenueDetail() {
-        return venueDetail;
+    public FoursquareVenueDetail getFoursquareVenueDetail() {
+        return foursquareVenueDetail;
     }
 }

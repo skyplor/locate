@@ -4,9 +4,22 @@
     android:layout_height="match_parent"
     tools:context="${relativePackage}.${activityClass}">
 
-    <TextView
-        android:text="@string/hello_world"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+    <include
+        android:id="@+id/venue_toolbar"
+        layout="@layout/toolbar" />
 
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/venue_toolbar">
+
+        <TextView
+            android:id="@+id/venue_details"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:padding="@dimen/abc_list_item_padding_horizontal_material"
+            android:text="@string/hello_world"
+            android:textSize="@dimen/abc_text_size_title_material" />
+    </RelativeLayout>
 </RelativeLayout>

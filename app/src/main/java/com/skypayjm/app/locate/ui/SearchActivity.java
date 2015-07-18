@@ -29,7 +29,7 @@ import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.model.FoursquareLocation;
 import com.skypayjm.app.locate.model.ResponseWrapper;
-import com.skypayjm.app.locate.model.ResultEvent;
+import com.skypayjm.app.locate.model.event.ResultEvent;
 import com.skypayjm.app.locate.model.Venue;
 import com.skypayjm.app.locate.network.NetworkStateChanged;
 import com.skypayjm.app.locate.util.FallbackLocationTracker;
@@ -95,6 +95,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     @ViewById
     SearchBox searchbox;
     private boolean autoCompleteModeOn;
+    private boolean searchHasFailedOnce;
 
     @Override
     protected void onStart() {
@@ -130,7 +131,6 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     @Override
     public void onBackPressed() {
         if (atBaseCategories) {
-            setResult(RESULT_CANCELED);
             realm.close();
             finish();
         } else {
@@ -450,6 +450,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
             @Override
             public void onSearchTermChanged() {
+                if (searchHasFailedOnce) searchHasFailedOnce = false;
                 // We will show suggestions by grabbing the last word and see if it matches the list of words.
                 // If yes, we show the suggestions relating to that word
                 if (!autoCompleteModeOn) {
@@ -504,7 +505,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             @Override
             public void onSearch(String searchTerm) {
                 Toast.makeText(SearchActivity.this, searchTerm + " Searched", Toast.LENGTH_LONG).show();
-                searchFoursquare(searchTerm);
+                searchFoursquare(searchTerm, false);
             }
         });
     }
@@ -566,7 +567,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     }
 
     @Background
-    public void searchFoursquare(final String searchTerm) {
+    public void searchFoursquare(final String searchTerm, boolean retry) {
 
         String location = userlatitude + "," + userlongitude;
         int radius = 5000;
@@ -603,35 +604,41 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 categoryIds = categoryIds + "," + selectedIds.get(index);
             }
         }
-        Timber.i("Query: " + query);
+
+        if (retry && location != null && !location.isEmpty()) {
+            near = null;
+        }
         FoursquareService.Implementation.get().search(location, near, radius, query, categoryIds, FOURSQUARE_INTENT, new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {
                 if (foursquareResponse != null) {
+                    // reset search failed variable
+                    searchHasFailedOnce = false;
                     ResponseWrapper responseWrapper = foursquareResponse.getResponse();
                     if (responseWrapper != null && responseWrapper.getSearchedVenues() != null)
                         searchedResults.addAll(responseWrapper.getSearchedVenues());
                 }
-                Timber.i("Got foursquare response: ");
-                for (Venue venue : searchedResults) {
-                    Timber.i("\n" + venue.getName());
-                }
                 if (searchedResults != null && !searchedResults.isEmpty())
                     goToResults(searchTerm);
                 else
-                    Toast.makeText(SearchActivity.this, getResources().getString(R.string.no_results_msg), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(SearchActivity.this, getResources().getString(R.string.no_results_msg), Toast.LENGTH_LONG).show();
             }
 
             @Override
             public void failure(RetrofitError error) {
-
+                if (!searchHasFailedOnce) {
+                    searchHasFailedOnce = true;
+                    // We retry again this time only with ll parameter passed in and without near parameter
+                    searchFoursquare(searchTerm, true);
+                } else {
+                    Toast.makeText(SearchActivity.this, getResources().getString(R.string.no_results_msg), Toast.LENGTH_LONG).show();
+                }
             }
         });
     }
 
     // We have gotten the result. Next step is to pass these result to the results activity using an EventBus
     private void goToResults(String searchTerm) {
-        setResult(RESULT_OK);
         // Pass the searchedResults over as well
         ResultEvent resultEvent = new ResultEvent();
         resultEvent.setResults(searchedResults);

@@ -3,11 +3,13 @@ package com.skypayjm.app.locate.ui;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.app.FragmentTransaction;
+import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.support.annotation.UiThread;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
@@ -29,11 +31,15 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.skypayjm.app.locate.R;
-import com.skypayjm.app.locate.model.ResultEvent;
+import com.skypayjm.app.locate.api.Foursquare.FoursquareResponse;
+import com.skypayjm.app.locate.api.Foursquare.FoursquareService;
+import com.skypayjm.app.locate.model.FoursquareVenueDetail;
 import com.skypayjm.app.locate.model.Venue;
-import com.skypayjm.app.locate.model.VenueDetailsEvent;
+import com.skypayjm.app.locate.model.event.ResultEvent;
+import com.skypayjm.app.locate.model.event.VenueDetailsEvent;
 
 import org.androidannotations.annotations.AfterViews;
+import org.androidannotations.annotations.Background;
 import org.androidannotations.annotations.EActivity;
 import org.androidannotations.annotations.OptionsItem;
 import org.androidannotations.annotations.OptionsMenu;
@@ -45,6 +51,9 @@ import java.util.List;
 import java.util.Map;
 
 import de.greenrobot.event.EventBus;
+import retrofit.Callback;
+import retrofit.RetrofitError;
+import retrofit.client.Response;
 import timber.log.Timber;
 
 @EActivity(R.layout.activity_result)
@@ -54,8 +63,8 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
     private static final String TAG_MAP = "MAP", TAG_LIST = "LIST";
     private static final String STATE_RESOLVING_ERROR = "resolving_error";
     private static final String DIALOG_ERROR = "dialog_error";
-    // Request code to use when launching the resolution activity and search activity
-    private static final int REQUEST_RESOLVE_ERROR = 1001, REQUEST_SEARCH = 1000;
+    // Request code to use when launching the resolution activity
+    private static final int REQUEST_RESOLVE_ERROR = 1001;
 
     private GoogleApiClient mGoogleApiClient;
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
@@ -66,7 +75,7 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
     private boolean mResolvingError;
     private boolean isListResultEnabled;
     private EventBus bus;
-    private ResultEvent resultEvent;
+    private ProgressDialog mSearchProgressDialog;
 
 
     @ViewById
@@ -111,17 +120,7 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_SEARCH) {
-            if (resultCode == RESULT_OK) {
-                // We populate the results and display
-                isListResultEnabled = true;
-                invalidateOptionsMenu();
-                displayResult();
-            } else {
-                isListResultEnabled = false;
-                invalidateOptionsMenu();
-            }
-        } else if (requestCode == REQUEST_RESOLVE_ERROR) {
+        if (requestCode == REQUEST_RESOLVE_ERROR) {
             mResolvingError = false;
             if (resultCode == RESULT_OK) {
                 // Make sure the app is not already connected or attempting to connect
@@ -175,7 +174,7 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
     @AfterViews
     protected void init() {
         initializeVariables();
-        setUpUI();
+        setupUI();
         setUpFragments();
         buildGoogleApiClient();
     }
@@ -185,14 +184,19 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
         isMapMode = true;
     }
 
-    private void setUpUI() {
+    private void setupUI() {
         setSupportActionBar(main_toolbar);
         tvSearch.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                SearchActivity_.intent(ResultsActivity.this).startForResult(REQUEST_SEARCH);
+                goToSearchActivity();
             }
         });
+    }
+
+    private void goToSearchActivity() {
+        SearchActivity_.intent(ResultsActivity.this).start();
+        finish();
     }
 
     private void setUpFragments() {
@@ -300,7 +304,7 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
     }
 
     private void getEvent() {
-        resultEvent = bus.getStickyEvent(ResultEvent.class);
+        ResultEvent resultEvent = bus.getStickyEvent(ResultEvent.class);
         if (resultEvent != null) {
             tvSearch.setText(resultEvent.getSearchTerm());
             List<Venue> venues = resultEvent.getResults();
@@ -421,12 +425,45 @@ public class ResultsActivity extends AppCompatActivity implements OnMapReadyCall
 
     private void goToVenueActivity(Marker marker) {
         if (markerVenueMap != null && markerVenueMap.containsKey(marker)) {
-            VenueActivity_.intent(this).start();
-            VenueDetailsEvent venueDetailsEvent = new VenueDetailsEvent();
-            venueDetailsEvent.setVenue(markerVenueMap.get(marker));
-            bus.postSticky(venueDetailsEvent);
+            showProgressDialog();
+            getFoursquareVenue(markerVenueMap.get(marker).getId());
         }
     }
 
+    @UiThread
+    public void showProgressDialog() {
+        // Setup the progress dialog that will be displayed
+        if (mSearchProgressDialog == null)
+            mSearchProgressDialog = new ProgressDialog(this);
+        mSearchProgressDialog.setTitle("Loading");
+        mSearchProgressDialog.setMessage("Searching Foursquare...");
+        mSearchProgressDialog.setCancelable(false);
+        mSearchProgressDialog.show();
+    }
 
+    @Background
+    public void getFoursquareVenue(String venueId) {
+        FoursquareService.Implementation.get().venueDetail(venueId, new Callback<FoursquareResponse>() {
+            @Override
+            public void success(FoursquareResponse foursquareResponse, Response response) {
+                mSearchProgressDialog.dismiss();
+                FoursquareVenueDetail venueDetail = foursquareResponse.getResponse().getFoursquareVenueDetail();
+                VenueDetailsEvent venueDetailsEvent = new VenueDetailsEvent();
+                venueDetailsEvent.setVenue(venueDetail);
+                bus.postSticky(venueDetailsEvent);
+                VenueActivity_.intent(ResultsActivity.this).start();
+            }
+
+            @Override
+            public void failure(RetrofitError error) {
+                mSearchProgressDialog.dismiss();
+                Timber.e("Failed to get venue: '%s'", error);
+                try {
+                    throw (error.getCause());
+                } catch (Throwable e) {
+                    Timber.e("Venue request failed: '%s'", e);
+                }
+            }
+        });
+    }
 }
