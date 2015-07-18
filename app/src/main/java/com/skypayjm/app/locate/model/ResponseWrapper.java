@@ -13,6 +13,7 @@ public class ResponseWrapper {
     public static final String FIELD_CATEGORIES = "categories";
     public static final String FIELD_MINIVENUES = "minivenues";
     public static final String FIELD_VENUES = "venues";
+    public static final String FIELD_VENUE = "venue";
 
     @SerializedName(FIELD_CATEGORIES)
     @Nullable
@@ -39,5 +40,14 @@ public class ResponseWrapper {
     @Nullable
     public List<Venue> getSearchedVenues() {
         return searchedVenues;
+    }
+
+    @SerializedName(FIELD_VENUE)
+    @Nullable
+    private VenueDetail venueDetail;
+
+    @Nullable
+    public VenueDetail getVenueDetail() {
+        return venueDetail;
     }
 }

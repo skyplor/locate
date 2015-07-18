@@ -13,12 +13,12 @@ import java.util.List;
 /**
  * Created by Sky on 14/7/2015.
  */
-public class CategoryRecyclerAdapter extends BaseRecyclerAdapter<Category, MyViewHolder> {
+public class CategoryCardRecyclerAdapter extends BaseRecyclerAdapter<Category, MyViewHolder> {
 
     private RecyclerViewListener recyclerViewListener;
     private List<Category> categories;
 
-    public CategoryRecyclerAdapter(List<Category> categories, RecyclerViewListener recyclerViewListener) {
+    public CategoryCardRecyclerAdapter(List<Category> categories, RecyclerViewListener recyclerViewListener) {
         this.recyclerViewListener = recyclerViewListener;
         this.categories = new ArrayList<>(categories);
     }

@@ -11,6 +11,7 @@ import retrofit.Callback;
 import retrofit.RestAdapter;
 import retrofit.converter.GsonConverter;
 import retrofit.http.GET;
+import retrofit.http.Path;
 import retrofit.http.Query;
 
 /**
@@ -34,11 +35,17 @@ public interface FoursquareService {
 
 
     @GET("/venues/search")
-    void search(@Query(value = "ll", encodeValue = false) String location, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent) throws FoursquareException;
+    void search(@Query(value = "ll", encodeValue = false) String location, @Query(value = "near", encodeValue = true) String near, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent) throws FoursquareException;
 
     @GET("/venues/search")
-    void search(@Query(value = "ll", encodeValue = false) String location, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent, Callback<FoursquareResponse> callback);
+    void search(@Query(value = "ll", encodeValue = false) String location, @Query(value = "near", encodeValue = true) String near, @Query("radius") int radius, @Query("query") String query, @Query("categoryId") String categoryIdCommaSeparated, @Query("intent") String intent, Callback<FoursquareResponse> callback);
 
+
+    @GET("/venues/{VENUE_ID}")
+    void venueDetail(@Path("VENUE_ID") String venue_id);
+
+    @GET("/venues/{VENUE_ID}")
+    void venueDetail(@Path("VENUE_ID") String venue_id, Callback<FoursquareResponse> callback);
 
     class Implementation {
         public static FoursquareService get() {

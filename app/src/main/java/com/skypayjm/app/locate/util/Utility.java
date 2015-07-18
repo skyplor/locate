@@ -68,4 +68,8 @@ public class Utility {
         currentLocation.setFoursquareLocation(foursquareLocation);
         return currentLocation;
     }
+
+    public static long getCurrentDateTime() {
+        return System.currentTimeMillis();
+    }
 }

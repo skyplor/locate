@@ -1,33 +1,37 @@
 package com.skypayjm.app.locate.ui;
 
 import android.app.Dialog;
+import android.app.DialogFragment;
+import android.app.FragmentTransaction;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import com.dd.realmbrowser.RealmBrowser;
-import com.dd.realmbrowser.RealmFilesActivity;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.places.Places;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.skypayjm.app.locate.R;
-import com.skypayjm.app.locate.model.Category;
-import com.skypayjm.app.locate.model.CategoryRelationship;
-import com.skypayjm.app.locate.model.Icon;
 import com.skypayjm.app.locate.model.ResultEvent;
 import com.skypayjm.app.locate.model.Venue;
+import com.skypayjm.app.locate.model.VenueDetailsEvent;
 
 import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.EActivity;
@@ -36,14 +40,16 @@ import org.androidannotations.annotations.OptionsMenu;
 import org.androidannotations.annotations.OptionsMenuItem;
 import org.androidannotations.annotations.ViewById;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import de.greenrobot.event.EventBus;
 import timber.log.Timber;
 
-@EActivity(R.layout.activity_main)
+@EActivity(R.layout.activity_result)
 @OptionsMenu(R.menu.menu_main)
-public class ResultsActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+public class ResultsActivity extends AppCompatActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG_MAP = "MAP", TAG_LIST = "LIST";
     private static final String STATE_RESOLVING_ERROR = "resolving_error";
@@ -52,14 +58,16 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     private static final int REQUEST_RESOLVE_ERROR = 1001, REQUEST_SEARCH = 1000;
 
     private GoogleApiClient mGoogleApiClient;
+    private GoogleMap mMap; // Might be null if Google Play services APK is not available.
+    private Map<Marker, Venue> markerVenueMap;
+    private boolean isMapMode;
 
-    // Unique tag for the error dialog fragment
     // Bool to track whether the app is already resolving an error
     private boolean mResolvingError;
     private boolean isListResultEnabled;
-    private boolean isMapMode;
-
+    private EventBus bus;
     private ResultEvent resultEvent;
+
 
     @ViewById
     Toolbar main_toolbar;
@@ -68,6 +76,8 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
 
     @OptionsMenuItem
     MenuItem action_map_list;
+
+    MapFragment mMapFragment;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -78,6 +88,7 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     @Override
     protected void onStart() {
         super.onStart();
+        bus.registerSticky(this);
         if (!mResolvingError) {
             mGoogleApiClient.connect();
         }
@@ -85,6 +96,7 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
 
     @Override
     protected void onStop() {
+        bus.unregister(this); // unregister EventBus
         super.onStop();
         if (mGoogleApiClient.isConnected()) {
             mGoogleApiClient.disconnect();
@@ -123,15 +135,8 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     }
 
     @Override
-    protected void onPause() {
-        EventBus.getDefault().unregister(this); // unregister EventBus
-        super.onPause();
-    }
-
-    @Override
     public void onResume() {
         super.onResume();
-        EventBus.getDefault().register(this);
         if (this.isMapMode) {
             switchToMap();
         } else {
@@ -153,25 +158,53 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         return super.onPrepareOptionsMenu(menu);
     }
 
+    @OptionsItem
+    void action_map_listSelected() {
+        isMapMode = !isMapMode;
+        if (isMapMode) {
+            switchToMap();
+            //This has to be opposite as the current view
+            action_map_list.setIcon(R.drawable.ic_list_white_24dp);
+        } else {
+            switchToList();
+            //This has to be opposite as the current view
+            action_map_list.setIcon(R.drawable.ic_map_white_24dp);
+        }
+    }
 
     @AfterViews
     protected void init() {
-        setSupportActionBar(main_toolbar);
-        isMapMode = true;
-        getEvent();
-        FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.add(R.id.fragment_container, new ResultMapFragment_(), TAG_MAP);
-        fragmentTransaction.add(R.id.fragment_container, new ResultListFragment_(), TAG_LIST);
-        fragmentTransaction.commit();
+        initializeVariables();
+        setUpUI();
+        setUpFragments();
         buildGoogleApiClient();
+    }
+
+    private void initializeVariables() {
+        bus = EventBus.getDefault();
+        isMapMode = true;
+    }
+
+    private void setUpUI() {
+        setSupportActionBar(main_toolbar);
         tvSearch.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 SearchActivity_.intent(ResultsActivity.this).startForResult(REQUEST_SEARCH);
             }
         });
-        RealmBrowser.getInstance().addRealmModel(Category.class, Icon.class, CategoryRelationship.class);
     }
+
+    private void setUpFragments() {
+        if (mMapFragment == null)
+            mMapFragment = MapFragment.newInstance();
+        mMapFragment.getMapAsync(this);
+        FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
+        fragmentTransaction.add(R.id.fragment_container, mMapFragment, TAG_MAP);
+        fragmentTransaction.add(R.id.fragment_container, new ResultListFragment_(), TAG_LIST);
+        fragmentTransaction.commit();
+    }
+
 
     protected synchronized void buildGoogleApiClient() {
         mGoogleApiClient = new GoogleApiClient
@@ -184,39 +217,15 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     }
 
     private void displayResult() {
-//        LatLngBounds mBounds = new LatLngBounds()
-//        PendingResult result = Places.GeoDataApi.getAutocompletePredictions(mGoogleApiClient, searchTerm,
-//                mBounds, mAutocompleteFilter);
         // if we have results, enable the icon
         isListResultEnabled = true;
         invalidateOptionsMenu();
     }
 
-    @OptionsItem
-    void action_map_listSelected() {
-        isMapMode = !isMapMode;
-        if (isMapMode) {
-            Toast.makeText(ResultsActivity.this, "Now showing Map View with List icon", Toast.LENGTH_SHORT).show();
-            switchToMap();
-            //This has to be opposite as the current view
-            action_map_list.setIcon(R.drawable.ic_list_white_24dp);
-        } else {
-            Toast.makeText(ResultsActivity.this, "Now showing List View with Map icon", Toast.LENGTH_SHORT).show();
-            switchToList();
-            //This has to be opposite as the current view
-            action_map_list.setIcon(R.drawable.ic_map_white_24dp);
-        }
-    }
-
-    @OptionsItem
-    void action_realm_dbSelected() {
-        RealmFilesActivity.start(this);
-    }
-
     private void switchToMap() {
-        ResultMapFragment fragMap = (ResultMapFragment_) getSupportFragmentManager().findFragmentByTag(TAG_MAP);
-        FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.detach(getSupportFragmentManager().findFragmentByTag(TAG_LIST));
+        MapFragment fragMap = (MapFragment) getFragmentManager().findFragmentByTag(TAG_MAP);
+        FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
+        fragmentTransaction.detach(getFragmentManager().findFragmentByTag(TAG_LIST));
         fragmentTransaction.attach(fragMap);
         fragmentTransaction.addToBackStack(null);
         fragmentTransaction.commitAllowingStateLoss();
@@ -224,9 +233,9 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     }
 
     private void switchToList() {
-        ResultListFragment fragList = (ResultListFragment_) getSupportFragmentManager().findFragmentByTag(TAG_LIST);
-        FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
-        fragmentTransaction.detach(getSupportFragmentManager().findFragmentByTag(TAG_MAP));
+        ResultListFragment fragList = (ResultListFragment_) getFragmentManager().findFragmentByTag(TAG_LIST);
+        FragmentTransaction fragmentTransaction = getFragmentManager().beginTransaction();
+        fragmentTransaction.detach(getFragmentManager().findFragmentByTag(TAG_MAP));
         fragmentTransaction.attach(fragList);
         fragmentTransaction.addToBackStack(null);
         fragmentTransaction.commitAllowingStateLoss();
@@ -234,9 +243,27 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
     }
 
     @Override
+    public void onMapReady(GoogleMap googleMap) {
+        this.mMap = googleMap;
+        mMap.setPadding(0, 100, 0, 0);
+        initializeUiSettings();
+        initializeMapLocationSettings();
+        initializeMapTraffic();
+        initializeMapType();
+        initializeMapViewSettings();
+        mMap.setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
+            @Override
+            public void onInfoWindowClick(Marker marker) {
+                goToVenueActivity(marker);
+
+            }
+        });
+        getEvent();
+    }
+
+    @Override
     public void onConnected(Bundle bundle) {
         // Connected to Google Play services!
-        // The good stuff goes here.
         Timber.i("Google connected!");
     }
 
@@ -272,7 +299,28 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         }
     }
 
-    /* Creates a dialog for an error message */
+    private void getEvent() {
+        resultEvent = bus.getStickyEvent(ResultEvent.class);
+        if (resultEvent != null) {
+            tvSearch.setText(resultEvent.getSearchTerm());
+            List<Venue> venues = resultEvent.getResults();
+            double latitude = 1.3667;
+            double longitude = 103.8;
+            boolean firstMarker = true;
+            for (Venue venue : venues) {
+                addMarker(venue);
+                if (firstMarker) {
+                    latitude = venue.getFoursquareLocation().getLat();
+                    longitude = venue.getFoursquareLocation().getLng();
+                    firstMarker = false;
+                }
+            }
+            zoomToMarkers(latitude, longitude);
+            displayResult();
+        }
+    }
+
+    // Creates a dialog for an error message
     private void showErrorDialog(int errorCode) {
         // Create a fragment for the error dialog
         ErrorDialogFragment dialogFragment = new ErrorDialogFragment();
@@ -280,15 +328,15 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         Bundle args = new Bundle();
         args.putInt(DIALOG_ERROR, errorCode);
         dialogFragment.setArguments(args);
-        dialogFragment.show(getSupportFragmentManager(), "errordialog");
+        dialogFragment.show(getFragmentManager(), "errordialog");
     }
 
-    /* Called from ErrorDialogFragment when the dialog is dismissed. */
+    // Called from ErrorDialogFragment when the dialog is dismissed.
     public void onDialogDismissed() {
         mResolvingError = false;
     }
 
-    /* A fragment to display an error dialog */
+    //  A fragment to display an error dialog
     public static class ErrorDialogFragment extends DialogFragment {
         public ErrorDialogFragment() {
         }
@@ -307,24 +355,78 @@ public class ResultsActivity extends AppCompatActivity implements GoogleApiClien
         }
     }
 
-    public void getEvent(){
-        ResultEvent resultEvent = EventBus.getDefault().getStickyEvent(ResultEvent.class);
-        tvSearch.setText(resultEvent.getSearchTerm());
-        List<Venue> venues = resultEvent.getResults();
-        for (Venue venue : venues) {
-            Timber.i(venue.getName());
+    // This method will be called when a ResultEvent is posted
+    public void onEvent(ResultEvent resultEvent) {
+        if (resultEvent != null) {
+            tvSearch.setText(resultEvent.getSearchTerm());
+            displayResult();
         }
     }
 
-//    @Subscribe(threadMode = ThreadMode.MainThread)
-    // This method will be called when a ResultEvent is posted
-    public void onEvent(ResultEvent event) {
-        resultEvent = EventBus.getDefault().removeStickyEvent(ResultEvent.class);
-        tvSearch.setText(resultEvent.getSearchTerm());
-        List<Venue> venues = resultEvent.getResults();
-        for (Venue venue : venues) {
-            Timber.i(venue.getName());
+    public void initializeUiSettings() {
+        mMap.getUiSettings().setCompassEnabled(true);
+        mMap.getUiSettings().setRotateGesturesEnabled(false);
+        mMap.getUiSettings().setTiltGesturesEnabled(true);
+        mMap.getUiSettings().setZoomControlsEnabled(true);
+        mMap.getUiSettings().setMyLocationButtonEnabled(true);
+    }
+
+    public void initializeMapLocationSettings() {
+        mMap.setMyLocationEnabled(true);
+    }
+
+    public void initializeMapTraffic() {
+        mMap.setTrafficEnabled(true);
+    }
+
+    public void initializeMapType() {
+        mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
+    }
+
+
+    public void initializeMapViewSettings() {
+        mMap.setIndoorEnabled(true);
+        mMap.setBuildingsEnabled(false);
+    }
+
+    //this is method to help us set up a Hashmap that stores the Markers we want to plot on the map
+    public void setUpMarkersHashMap() {
+        if (markerVenueMap == null) {
+            markerVenueMap = new HashMap<>();
         }
     }
+
+    //this is method to help us add a Marker to the map
+    public void addMarker(Venue venue) {
+        double latitude = venue.getFoursquareLocation().getLat();
+        double longitude = venue.getFoursquareLocation().getLng();
+        String name = venue.getName();
+        MarkerOptions markerOption = new MarkerOptions().position(
+                new LatLng(latitude, longitude)).icon(BitmapDescriptorFactory.defaultMarker()).title(name);
+
+        Marker marker = mMap.addMarker(markerOption);
+        addMarkerToHashMap(marker, venue);
+    }
+
+    //this is method to help us add a Marker into the hashmap that stores the Markers
+    public void addMarkerToHashMap(Marker marker, Venue venue) {
+        setUpMarkersHashMap();
+        markerVenueMap.put(marker, venue);
+    }
+
+    public void zoomToMarkers(double latitude, double longitude) {
+        CameraPosition cameraPosition = new CameraPosition.Builder().target(new LatLng(latitude, longitude)).zoom(12).build();
+        mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+    }
+
+    private void goToVenueActivity(Marker marker) {
+        if (markerVenueMap != null && markerVenueMap.containsKey(marker)) {
+            VenueActivity_.intent(this).start();
+            VenueDetailsEvent venueDetailsEvent = new VenueDetailsEvent();
+            venueDetailsEvent.setVenue(markerVenueMap.get(marker));
+            bus.postSticky(venueDetailsEvent);
+        }
+    }
+
 
 }

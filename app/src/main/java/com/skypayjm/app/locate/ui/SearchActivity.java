@@ -19,9 +19,9 @@ import com.google.android.gms.location.LocationServices;
 import com.quinny898.library.persistentsearch.SearchBox;
 import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.adapter.BaseRecyclerAdapter;
-import com.skypayjm.app.locate.adapter.CategoryRecyclerAdapter;
+import com.skypayjm.app.locate.adapter.CategoryCardRecyclerAdapter;
 import com.skypayjm.app.locate.adapter.RecyclerViewListener;
-import com.skypayjm.app.locate.adapter.VenueRecyclerAdapter;
+import com.skypayjm.app.locate.adapter.VenueCardRecyclerAdapter;
 import com.skypayjm.app.locate.api.Foursquare.FoursquareResponse;
 import com.skypayjm.app.locate.api.Foursquare.FoursquareService;
 import com.skypayjm.app.locate.db.Migration;
@@ -68,9 +68,10 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public static final int SPAN_COUNT = 3;
     public static final int SEARCH_STARTPOSITION = 0;
     public static final String FOURSQUARE_INTENT = "browse";
-    private CategoryRecyclerAdapter mCategoryRecyclerAdapter;
-    private VenueRecyclerAdapter mVenueRecyclerAdapter;
+    private CategoryCardRecyclerAdapter mCategoryCardRecyclerAdapter;
+    private VenueCardRecyclerAdapter mVenueCardRecyclerAdapter;
     private List<String> selectedIds = new ArrayList<>();
+    private Venue selectedVenue;
     private List<Category> categories = new ArrayList<>();
     private List<Venue> venues = new ArrayList<>();
     private List<Venue> searchedResults = new ArrayList<>();
@@ -79,12 +80,12 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     private final String categoriesID = "parentCategoriesID";
     private boolean atBaseCategories;
     private boolean isSearchOpened;
-    private boolean userSelectLocation;
     private Realm realm;
-    private FoursquareLocation searchFoursquareLocation;
+    private String near;
     private double userlatitude;
     private double userlongitude;
     private GoogleApiClient mGoogleApiClient;
+    private EventBus bus;
     private int endPosition;
     protected Location mLastLocation;
     @ViewById
@@ -96,26 +97,21 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     private boolean autoCompleteModeOn;
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+        bus.registerSticky(this);
+    }
+
+    @Override
     public void onPause() {
         Utility.hide_keyboard(this);
-        EventBus.getDefault().unregister(this); // unregister EventBus
         super.onPause();
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        EventBus.getDefault().register(this);
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        mGoogleApiClient.connect();
-    }
-
-    @Override
     protected void onStop() {
+        bus.unregister(this); // unregister EventBus
         super.onStop();
         if (mGoogleApiClient.isConnected()) {
             mGoogleApiClient.disconnect();
@@ -138,59 +134,94 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             realm.close();
             finish();
         } else {
-            showParentCategories();
+            if (categories != null && !categories.isEmpty())
+                displayParentCategories(categories.get(0));
         }
+    }
+
+    @Override
+    public void onConnected(Bundle connectionHint) {
+        mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
+                mGoogleApiClient);
+        if (mLastLocation != null) {
+            userlatitude = mLastLocation.getLatitude();
+            userlongitude = mLastLocation.getLongitude();
+        }
+    }
+
+    @Override
+    public void onConnectionSuspended(int cause) {
+        // The connection to Google Play services was lost for some reason. We call connect() to
+        // attempt to re-establish the connection.
+        Timber.i("Connection suspended");
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Timber.i("Connection failed: ConnectionResult.getErrorCode() = " + connectionResult.getErrorCode());
     }
 
     @AfterViews
     void init() {
-        NetworkStateChanged networkStateChanged = EventBus.getDefault().getStickyEvent(NetworkStateChanged.class);
-        if (networkStateChanged != null && !networkStateChanged.isInternetConnected()) {
-            Toast.makeText(this, "No Internet connection!", Toast.LENGTH_SHORT).show();
-            Timber.i("No Internet connection");
-        }
+        bus = EventBus.getDefault();
+        atBaseCategories = true;
         setSupportActionBar(search_toolbar);
         initializeSearchbox();
-        EventBus.getDefault().register(this); // register EventBus
+        setUpSharedPreferences();
+        setUpRealmDB();
+        buildGoogleApiClient();
+        setUpRecyclerView();
 
-        atBaseCategories = true;
+        // Only update once a week
+        if (hasNotUpdated(-7))
+            getFoursquareCategories();
+        else loadBaseCategories();
+    }
+
+    private void setUpRecyclerView() {
         category_resultList.setHasFixedSize(true);
         // Define 3 column grid layout
         final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, SPAN_COUNT);
         category_resultList.setLayoutManager(layout);
-        pref = new SimplePref(this, "LocatePref");
-        buildGoogleApiClient();
-        mCategoryRecyclerAdapter = new CategoryRecyclerAdapter(categories, new RecyclerViewListener<Category>() {
-            @Override
-            public void onItemClickListener(View view, Category category) {
-                if (view.getId() == R.id.ivAddSearch)
-                    addToSearch(searchbox.getSearchText().length() - 1, category.getName(), category.getId(), null);
-                goToChildCategory(category);
-            }
-        });
-        mVenueRecyclerAdapter = new VenueRecyclerAdapter(venues, new RecyclerViewListener<Venue>() {
-            @Override
-            public void onItemClickListener(View view, Venue item) {
-                userSelectLocation = true;
-                if (item.getName().equals("Current Location")) {
-                    getCurrentLocation();
-                    addToSearch(endPosition, "me", "", null);
-                } else {
-                    addToSearch(endPosition, item.getName(), "", item.getFoursquareLocation());
-                }
-            }
-        });
+        InitializeAdapters();
+        category_resultList.setAdapter(mCategoryCardRecyclerAdapter);
+    }
+
+    private void setUpRealmDB() {
         RealmConfiguration config1 = new RealmConfiguration.Builder(this)
                 .schemaVersion(1)
                 .migration(new Migration())
                 .build();
 
         realm = Realm.getInstance(config1);
-        category_resultList.setAdapter(mCategoryRecyclerAdapter);
-        // Only update once a week
-        if (hasNotUpdated(-7))
-            getFoursquareCategories();
-        else loadBaseCategories();
+    }
+
+    private void setUpSharedPreferences() {
+        pref = new SimplePref(this, "LocatePref");
+    }
+
+    private void InitializeAdapters() {
+        mCategoryCardRecyclerAdapter = new CategoryCardRecyclerAdapter(categories, new RecyclerViewListener<Category>() {
+            @Override
+            public void onItemClickListener(View view, Category category) {
+                if (view.getId() == R.id.ivAddSearch)
+                    addToSearchbox(searchbox.getSearchText().length() - 1, category.getName(), category.getId(), null);
+                displaySubCategories(category);
+            }
+        });
+        mVenueCardRecyclerAdapter = new VenueCardRecyclerAdapter(venues, new RecyclerViewListener<Venue>() {
+            @Override
+            public void onItemClickListener(View view, Venue item) {
+                if (item.getName().equals("Current Location")) {
+                    getCurrentLocation();
+                    addToSearchbox(endPosition, "me", "", null);
+                } else {
+                    selectedVenue = item;
+                    addToSearchbox(endPosition, item.getName(), "", item.getFoursquareLocation());
+                }
+            }
+        });
     }
 
     private void getCurrentLocation() {
@@ -219,21 +250,35 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 .build();
     }
 
-    private void addToSearch(int endPosition, String item_name, String categoryId, FoursquareLocation foursquareLocation) {
+    private void addToSearchbox(int endPosition, String item_name, String categoryId, FoursquareLocation foursquareLocation) {
         if (!isSearchOpened) searchbox.toggleSearch();
         String search = searchbox.getSearchText();
-        Timber.i("inside addToSearch: " + search);
         if (search.length() != 0 && endPosition > 0) {
             search = search.substring(SEARCH_STARTPOSITION, endPosition).trim() + " ";
-            Timber.i("Search now: " + search);
         }
         searchbox.setSearchString(search.concat(item_name).concat(" "));
         if (!categoryId.equals(""))
             selectedIds.add(categoryId);
-        if (foursquareLocation != null) searchFoursquareLocation = foursquareLocation;
-        Timber.i("inside addToSearch2: " + searchbox.getSearchText());
+        if (foursquareLocation != null) near = foursquareLocation.getAddress();
 
-        userSelectLocation = false;
+        String parentCategoryId = getParentCategory(categoryId);
+        removeParentCategory(parentCategoryId);
+    }
+
+    private String getParentCategory(String categoryId) {
+        CategoryRelationship tempresult = getParentCategoryRelationship(categoryId);
+        if (tempresult != null) {
+            // There is a parent category
+            return tempresult.getParentID();
+        }
+        return "";
+    }
+
+    // If user selects a subcategory, we should remove the parent category (if user had selected it previously so that our result is accurate)
+    private void removeParentCategory(String categoryId) {
+        if (!categoryId.isEmpty()) {
+            selectedIds.remove(categoryId);
+        }
     }
 
     private boolean hasNotUpdated(int nDays) {
@@ -243,25 +288,19 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         return pref.get(foursquareCategoriesLastUpdated, 0L) < nDaysAgo.getTime();
     }
 
-    private long getCurrentDateTime() {
-        return System.currentTimeMillis();
-    }
-
     @Background
     public void getFoursquareCategories() {
         FoursquareService.Implementation.get().venuesCategories(new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {
                 List<Category> categories = foursquareResponse.getResponse().getCategories();
-                onCategoriesReceived(categories);
-                Timber.i("Loaded categories");
-                updateSharedPref(getCurrentDateTime());
+                updateDB(categories);
+                updateSharedPref(Utility.getCurrentDateTime());
                 loadBaseCategories();
             }
 
             @Override
             public void failure(RetrofitError error) {
-//                if (isDestroyed()) return;
                 Timber.e("Failed to load categories: '%s'", error);
                 try {
                     throw (error.getCause());
@@ -272,7 +311,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         });
     }
 
-    private void onCategoriesReceived(final List<Category> categories) {
+    private void updateDB(final List<Category> categories) {
         final StringBuilder stringBuilder = new StringBuilder();
 
         // Copy the object to Realm. Any further changes must happen on realmUser
@@ -304,6 +343,10 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         }
     }
 
+    private void updateSharedPref(long timeUpdated) {
+        pref.set(foursquareCategoriesLastUpdated, timeUpdated);
+    }
+
     public void loadBaseCategories() {
         String parentIDstring = pref.get(categoriesID, "");
         if (parentIDstring.equals("")) {
@@ -320,11 +363,12 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             }
             RealmResults<Category> result = query.findAllSorted(Category.FIELD_NAME);
             categories = new ArrayList<>(result);
-            display(mCategoryRecyclerAdapter, categories);
+            display(mCategoryCardRecyclerAdapter, categories);
         }
 
     }
 
+    // Method which handles the swapping of adapters and notifying of the swap to allow recycler view to display
     public void display(BaseRecyclerAdapter mRecyclerAdapter, List items) {
         if (items != null && !items.isEmpty()) {
             mRecyclerAdapter.updateItems(items);
@@ -333,17 +377,50 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         }
     }
 
-    private void updateSharedPref(long timeUpdated) {
-        pref.set(foursquareCategoriesLastUpdated, timeUpdated);
-    }
-
-    public void goToChildCategory(Category category) {
+    // Search for the subcategories of the category passed in and display them
+    public void displaySubCategories(Category category) {
         List<Category> subcategories = category.getCategories();
         if (!subcategories.isEmpty()) {
             atBaseCategories = false;
             categories = subcategories;
-            display(mCategoryRecyclerAdapter, categories);
+            display(mCategoryCardRecyclerAdapter, categories);
         }
+    }
+
+    // Search for the categories belonging to the same Grandparent as the parent category of the category passed in and display them
+    private void displayParentCategories(Category category) {
+        CategoryRelationship tempresult = getParentCategoryRelationship(category.getId());
+        RealmQuery query;
+        if (tempresult == null) {
+            atBaseCategories = true; // table will only consist of subcategories
+        } else {
+            atBaseCategories = false;
+            query = realm.where(CategoryRelationship.class);
+            CategoryRelationship parentResult = (CategoryRelationship) query.equalTo(CategoryRelationship.ID, tempresult.getParentID()).findFirst();
+            if (parentResult == null) {
+                // means our parent is the base
+                loadBaseCategories();
+            } else {
+                // Now to find all those with the same parent
+                RealmResults<CategoryRelationship> results
+                        = realm.where(CategoryRelationship.class)
+                        .equalTo(CategoryRelationship.PARENTID, parentResult.getParentID())
+                        .findAll();
+                List<Category> parentCategories = new ArrayList<>();
+                for (CategoryRelationship categoryRelationship : results) {
+                    parentCategories.add(categoryRelationship.getChildCategory());
+                }
+                categories = parentCategories;
+                display(mCategoryCardRecyclerAdapter, categories);
+
+            }
+        }
+    }
+
+    private CategoryRelationship getParentCategoryRelationship(String categoryId) {
+        RealmQuery query = realm.where(CategoryRelationship.class);
+        query = query.equalTo(CategoryRelationship.ID, categoryId);
+        return (CategoryRelationship) query.findFirst();
     }
 
     private void initializeSearchbox() {
@@ -376,9 +453,10 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 // We will show suggestions by grabbing the last word and see if it matches the list of words.
                 // If yes, we show the suggestions relating to that word
                 if (!autoCompleteModeOn) {
-                    String s = searchbox.getSearchText();
-                    if (s.length() > 0 && s.substring(s.length() - 1).equals(" ")) {
-                        String[] strArray = s.replaceAll("[^a-zA-Z ]", "").toLowerCase().split("\\s+");
+                    String searchText = searchbox.getSearchText();
+                    near = "";
+                    if (searchText.length() > 0 && searchText.substring(searchText.length() - 1).equals(" ")) {
+                        String[] strArray = searchText.replaceAll("[^a-zA-Z ]", "").toLowerCase().split("\\s+");
                         if (strArray.length > 0) {
                             Timber.i("Last word is '%s'", strArray[strArray.length - 1]);
                             //if last word is location keywords e.g. in/near/around/at
@@ -392,30 +470,31 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                         }
                     }
                 } else {
-                    if (!userSelectLocation) {
-                        searchFoursquareLocation = null;
-                    }
-                    String s = searchbox.getSearchText();
-                    Timber.i("Searched string now is: " + s);
-                    int minPos = getMinimumPosition(s, true);
+                    String searchText = searchbox.getSearchText();
+                    int minPos = getMinimumPosition(searchText, true);
                     // we get the position to start the autocomplete by getting the position of the location keywords
                     // if we don't find any of the keywords, we switch autocompletemode off.
-                    if (minPos == Integer.MAX_VALUE) {
+                    if (minPos == searchText.length()) {
                         autoCompleteModeOn = false;
-                        Timber.i("Displaying categories");
-                        display(mCategoryRecyclerAdapter, categories);
+                        display(mCategoryCardRecyclerAdapter, categories);
                     } else {
                         // update the adapter to display autocomplete results
-                        // first get user lastknownlocation and we search from there for autocomplete suggestions
                         if (userlatitude != 0.0 && userlongitude != 0.0) {
                             endPosition = minPos;
+                            near = searchText.substring(minPos);
+
+                            if (selectedVenue != null && !near.trim().equals(selectedVenue.getName().trim())) {
+                                Timber.i("Selected Location will be changed to null");
+                                selectedVenue = null;
+                            }
+                            Timber.i("Near: " + near);
                             if (isMinCharLong(minPos, SEARCHQUERY_LENGTH)) {
-                                getFoursquareSuggestLocations(s.substring(minPos));
+                                getFoursquareSuggestLocations(near);
                             } else {
                                 venues = new ArrayList<>();
                                 Venue currentLocation = Utility.createCurrentVenue(userlatitude, userlongitude);
                                 venues.add(currentLocation);
-                                display(mVenueRecyclerAdapter, venues);
+                                display(mVenueCardRecyclerAdapter, venues);
                             }
                         }
                     }
@@ -430,22 +509,25 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         });
     }
 
+    private void setSearchDrawerLogo(int drawerLogo) {
+        searchbox.setDrawerLogo(ContextCompat.getDrawable(this, drawerLogo));
+    }
+
     /**
      * This is a method which takes in a query and returns either the last position right before the
      * conjunction or right after the conjunction.
+     * TODO Not a good approach. To think of a better logic for this.
      *
      * @param query     This is the string which consists of 3 parts i.e. category, conjunction, location
      * @param including If including is true, the position returned will be right after the conjunction
      * @return The ending position of the string which can be used to further process the query
      */
     private int getMinimumPosition(String query, boolean including) {
-        Timber.i("Query is: " + query);
         int nearPos = (!query.contains(NEAR)) ? Integer.MAX_VALUE : (including ? query.indexOf(NEAR) + NEAR.length() : query.indexOf(NEAR));
         int inPos = (!query.contains(IN)) ? Integer.MAX_VALUE : (including ? query.indexOf(IN) + IN.length() : query.indexOf(IN));
         int atPos = (!query.contains(AT)) ? Integer.MAX_VALUE : (including ? query.indexOf(AT) + AT.length() : query.indexOf(AT));
         int aroundPos = (!query.contains(AROUND)) ? Integer.MAX_VALUE : (including ? query.indexOf(AROUND) + AROUND.length() : query.indexOf(AROUND));
         int result = Math.min(nearPos, Math.min(inPos, Math.min(atPos, aroundPos)));
-        if (result == Integer.MAX_VALUE) Timber.i("result is max value");
         return result == Integer.MAX_VALUE ? query.length() : result;
     }
 
@@ -467,12 +549,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                     if (responseWrapper != null && responseWrapper.getSuggestedVenues() != null)
                         venues.addAll(responseWrapper.getSuggestedVenues());
                 }
-                Timber.i("Got foursquare response: ");
-                for (Venue venue : venues) {
-                    Timber.i("\n" + venue.getName());
-                    Timber.i("Coordinates: " + venue.getFoursquareLocation().getLat() + "," + venue.getFoursquareLocation().getLng());
-                }
-                display(mVenueRecyclerAdapter, venues);
+                display(mVenueCardRecyclerAdapter, venues);
             }
 
             @Override
@@ -506,16 +583,16 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 2.3 User did not input a location, same as use case 2.
         */
         // This means user selected a suggestion and never deletes it
-        if (searchFoursquareLocation != null) {
-            location = searchFoursquareLocation.getLat() + "," + searchFoursquareLocation.getLng();
-        } else if (!venues.isEmpty() && venues.size() > 1) {
-            double lat = venues.get(1).getFoursquareLocation().getLat();
-            double lng = venues.get(1).getFoursquareLocation().getLng();
-            location = lat + "," + lng;
-            Timber.i("Venues is not empty." + location);
-        } else {
-            radius = 20000;
+        if (selectedVenue != null)
+            location = selectedVenue.getFoursquareLocation().getLat() + "," + selectedVenue.getFoursquareLocation().getLng();
+        else if (!near.isEmpty()) {
+            location = null;
         }
+//        else if (!venues.isEmpty() && venues.size() > 1) {
+//            double lat = venues.get(1).getFoursquareLocation().getLat();
+//            double lng = venues.get(1).getFoursquareLocation().getLng();
+//            location = lat + "," + lng;
+//        }
         // If user does not select any category, we will search from the input string directly
         if (selectedIds == null || selectedIds.isEmpty()) {
             Timber.i("Minimum position: " + getMinimumPosition(searchTerm, false));
@@ -527,7 +604,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
             }
         }
         Timber.i("Query: " + query);
-        FoursquareService.Implementation.get().search(location, radius, query, categoryIds, FOURSQUARE_INTENT, new Callback<FoursquareResponse>() {
+        FoursquareService.Implementation.get().search(location, near, radius, query, categoryIds, FOURSQUARE_INTENT, new Callback<FoursquareResponse>() {
             @Override
             public void success(FoursquareResponse foursquareResponse, Response response) {
                 if (foursquareResponse != null) {
@@ -539,7 +616,10 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 for (Venue venue : searchedResults) {
                     Timber.i("\n" + venue.getName());
                 }
-                goToResults(searchTerm);
+                if (searchedResults != null && !searchedResults.isEmpty())
+                    goToResults(searchTerm);
+                else
+                    Toast.makeText(SearchActivity.this, getResources().getString(R.string.no_results_msg), Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -549,85 +629,23 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
         });
     }
 
+    // We have gotten the result. Next step is to pass these result to the results activity using an EventBus
     private void goToResults(String searchTerm) {
-        //if search successful, setresult ok with bundle data and finish this activity
-
         setResult(RESULT_OK);
         // Pass the searchedResults over as well
         ResultEvent resultEvent = new ResultEvent();
         resultEvent.setResults(searchedResults);
         resultEvent.setSearchTerm(searchTerm);
-        EventBus.getDefault().postSticky(resultEvent);
+        bus.postSticky(resultEvent);
         ResultsActivity_.intent(SearchActivity.this).start();
-//        Intent intent = new Intent(this, TestActivity.class);
-//        startActivity(intent);
         Utility.hide_keyboard(SearchActivity.this);
         realm.close();
         finish();
     }
 
-    private void setSearchDrawerLogo(int drawerLogo) {
-        searchbox.setDrawerLogo(ContextCompat.getDrawable(this, drawerLogo));
-    }
-
-    private void showParentCategories() {
-        RealmQuery query = realm.where(CategoryRelationship.class);
-        if (categories != null && !categories.isEmpty())
-            query = query.equalTo(CategoryRelationship.ID, categories.get(0).getId());
-        CategoryRelationship tempresult = (CategoryRelationship) query.findFirst();
-        if (tempresult == null) {
-            atBaseCategories = true; // table will only consist of subcategories
-        } else {
-            atBaseCategories = false;
-            query = realm.where(CategoryRelationship.class);
-            CategoryRelationship parentResult = (CategoryRelationship) query.equalTo(CategoryRelationship.ID, tempresult.getParentID()).findFirst();
-            if (parentResult == null) {
-                // means our parent is the base
-                loadBaseCategories();
-            } else {
-                // Now to find all those with the same parent
-                RealmResults<CategoryRelationship> results
-                        = realm.where(CategoryRelationship.class)
-                        .equalTo(CategoryRelationship.PARENTID, parentResult.getParentID())
-                        .findAll();
-                List<Category> parentCategories = new ArrayList<>();
-                for (CategoryRelationship categoryRelationship : results) {
-                    parentCategories.add(categoryRelationship.getChildCategory());
-                }
-                categories = parentCategories;
-                display(mCategoryRecyclerAdapter, categories);
-
-            }
-        }
-    }
-
-    @Override
-    public void onConnected(Bundle connectionHint) {
-        mLastLocation = LocationServices.FusedLocationApi.getLastLocation(
-                mGoogleApiClient);
-        if (mLastLocation != null) {
-            userlatitude = mLastLocation.getLatitude();
-            userlongitude = mLastLocation.getLongitude();
-        }
-    }
-
-    @Override
-    public void onConnectionSuspended(int cause) {
-        // The connection to Google Play services was lost for some reason. We call connect() to
-        // attempt to re-establish the connection.
-        Timber.i("Connection suspended");
-        mGoogleApiClient.connect();
-    }
-
-    @Override
-    public void onConnectionFailed(ConnectionResult connectionResult) {
-        Timber.i("Connection failed: ConnectionResult.getErrorCode() = " + connectionResult.getErrorCode());
-    }
-
-    //    @Subscribe(threadMode = ThreadMode.MainThread)
     // method that will be called when someone posts an event NetworkStateChanged
-    public void onEventMainThread(NetworkStateChanged event) {
-        if (!event.isInternetConnected()) {
+    public void onEvent(NetworkStateChanged event) {
+        if (event != null && !event.isInternetConnected()) {
             Toast.makeText(this, "No Internet connection!", Toast.LENGTH_SHORT).show();
             Timber.i("No Internet connection");
         }

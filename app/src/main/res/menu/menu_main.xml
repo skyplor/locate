@@ -6,9 +6,4 @@
         android:icon="@drawable/ic_list_white_24dp"
         android:title="@string/menu_item_map"
         app:showAsAction="always" />
-    <item
-        android:id="@+id/action_realm_db"
-        android:icon="@drawable/ic_cast_light"
-        android:title="@string/menu_item_map"
-        app:showAsAction="always" />
 </menu>
