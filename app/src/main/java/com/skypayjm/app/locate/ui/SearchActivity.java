@@ -67,7 +67,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public static final String AROUND = " around ";
     public static final int SEARCHQUERY_LENGTH = 3;
     public static final int SEARCH_STARTPOSITION = 0;
-    public static final String FOURSQUARE_INTENT = "browse";
+    public static final String FOURSQUARE_INTENT = "checkin";
+    public static final int FOURSQUARE_SEARCH_RADIUS = 1000;
     private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
     private final String categoriesID = "parentCategoriesID";
 
@@ -581,7 +582,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public void searchFoursquare(final String searchTerm, boolean retry) {
 
         String location = userlatitude + "," + userlongitude;
-        int radius = 5000;
+        int radius = FOURSQUARE_SEARCH_RADIUS;
         String query = "";
         String categoryIds = "";
 
