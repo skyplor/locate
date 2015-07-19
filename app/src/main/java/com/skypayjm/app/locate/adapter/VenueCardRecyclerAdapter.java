@@ -3,6 +3,7 @@ package com.skypayjm.app.locate.adapter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 
 import com.skypayjm.app.locate.R;
 import com.skypayjm.app.locate.model.Venue;
@@ -15,10 +16,10 @@ import java.util.List;
  */
 public class VenueCardRecyclerAdapter extends BaseRecyclerAdapter<Venue, MyViewHolder> {
 
-    private RecyclerViewListener recyclerViewListener;
+    private RecyclerViewListener<Venue> recyclerViewListener;
     private List<Venue> venues;
 
-    public VenueCardRecyclerAdapter(List<Venue> venues, RecyclerViewListener recyclerViewListener) {
+    public VenueCardRecyclerAdapter(List<Venue> venues, RecyclerViewListener<Venue> recyclerViewListener) {
         this.recyclerViewListener = recyclerViewListener;
         this.venues = new ArrayList<>(venues);
     }
@@ -40,6 +41,13 @@ public class VenueCardRecyclerAdapter extends BaseRecyclerAdapter<Venue, MyViewH
                 recyclerViewListener.onItemClickListener(v, venue);
             }
         });
+        // Get params:
+        LinearLayout.LayoutParams loparams = (LinearLayout.LayoutParams) holder.tvName.getLayoutParams();
+        if (loparams != null) {
+            // Set only target params:
+            loparams.weight = 4;
+            holder.tvName.setLayoutParams(loparams);
+        }
         holder.ivAddSearch.setVisibility(View.GONE);
     }
 
@@ -49,7 +57,7 @@ public class VenueCardRecyclerAdapter extends BaseRecyclerAdapter<Venue, MyViewH
     }
 
     @Override
-    public void updateItems(List venues) {
+    public void updateItems(List<Venue> venues) {
         this.venues.clear();
 
         this.venues.addAll(venues);

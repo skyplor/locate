@@ -65,7 +65,6 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public static final String AT = " at ";
     public static final String AROUND = " around ";
     public static final int SEARCHQUERY_LENGTH = 3;
-    public static final int SPAN_COUNT = 3;
     public static final int SEARCH_STARTPOSITION = 0;
     public static final String FOURSQUARE_INTENT = "browse";
     private CategoryCardRecyclerAdapter mCategoryCardRecyclerAdapter;
@@ -181,8 +180,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
     private void setUpRecyclerView() {
         category_resultList.setHasFixedSize(true);
-        // Define 3 column grid layout
-        final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, SPAN_COUNT);
+        // Define column grid layout
+        final GridLayoutManager layout = new GridLayoutManager(SearchActivity.this, getResources().getInteger(R.integer.column_span));
         category_resultList.setLayoutManager(layout);
         InitializeAdapters();
         category_resultList.setAdapter(mCategoryCardRecyclerAdapter);

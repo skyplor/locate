@@ -15,10 +15,10 @@ import java.util.List;
  */
 public class CategoryCardRecyclerAdapter extends BaseRecyclerAdapter<Category, MyViewHolder> {
 
-    private RecyclerViewListener recyclerViewListener;
+    private RecyclerViewListener<Category> recyclerViewListener;
     private List<Category> categories;
 
-    public CategoryCardRecyclerAdapter(List<Category> categories, RecyclerViewListener recyclerViewListener) {
+    public CategoryCardRecyclerAdapter(List<Category> categories, RecyclerViewListener<Category> recyclerViewListener) {
         this.recyclerViewListener = recyclerViewListener;
         this.categories = new ArrayList<>(categories);
     }
@@ -54,7 +54,7 @@ public class CategoryCardRecyclerAdapter extends BaseRecyclerAdapter<Category, M
     }
 
     @Override
-    public void updateItems(List categories) {
+    public void updateItems(List<Category> categories) {
         this.categories.clear();
 
         this.categories.addAll(categories);

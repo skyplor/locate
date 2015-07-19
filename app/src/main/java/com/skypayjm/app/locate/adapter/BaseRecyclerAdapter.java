@@ -19,7 +19,7 @@ abstract public class BaseRecyclerAdapter<T extends Object, VH extends BaseViewH
     @Override
     public abstract int getItemCount();
 
-    public abstract <T extends Object> void updateItems(List<T> items);
+    public abstract void updateItems(List<T> items);
 
-    public abstract <T extends Object> T getItemAtPosition(int position);
+    public abstract T getItemAtPosition(int position);
 }
