@@ -11,6 +11,7 @@ import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -29,8 +30,8 @@ import com.skypayjm.app.locate.model.Category;
 import com.skypayjm.app.locate.model.CategoryRelationship;
 import com.skypayjm.app.locate.model.FoursquareLocation;
 import com.skypayjm.app.locate.model.ResponseWrapper;
-import com.skypayjm.app.locate.model.event.ResultEvent;
 import com.skypayjm.app.locate.model.Venue;
+import com.skypayjm.app.locate.model.event.ResultEvent;
 import com.skypayjm.app.locate.network.NetworkStateChanged;
 import com.skypayjm.app.locate.util.FallbackLocationTracker;
 import com.skypayjm.app.locate.util.Utility;
@@ -67,34 +68,40 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     public static final int SEARCHQUERY_LENGTH = 3;
     public static final int SEARCH_STARTPOSITION = 0;
     public static final String FOURSQUARE_INTENT = "browse";
+    private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
+    private final String categoriesID = "parentCategoriesID";
+
     private CategoryCardRecyclerAdapter mCategoryCardRecyclerAdapter;
     private VenueCardRecyclerAdapter mVenueCardRecyclerAdapter;
     private List<String> selectedIds = new ArrayList<>();
-    private Venue selectedVenue;
     private List<Category> categories = new ArrayList<>();
     private List<Venue> venues = new ArrayList<>();
     private List<Venue> searchedResults = new ArrayList<>();
+
     private SimplePref pref;
-    private final String foursquareCategoriesLastUpdated = "4squareLastUpdate";
-    private final String categoriesID = "parentCategoriesID";
-    private boolean atBaseCategories;
-    private boolean isSearchOpened;
     private Realm realm;
-    private String near;
-    private double userlatitude;
-    private double userlongitude;
+    private Venue selectedVenue;
     private GoogleApiClient mGoogleApiClient;
     private EventBus bus;
-    private int endPosition;
     protected Location mLastLocation;
+
+    private String near;
+    private boolean atBaseCategories;
+    private boolean isSearchOpened;
+    private boolean autoCompleteModeOn;
+    private boolean searchHasFailedOnce;
+    private double userlatitude;
+    private double userlongitude;
+    private int endPosition;
+
     @ViewById
     Toolbar search_toolbar;
     @ViewById
     RecyclerView category_resultList;
     @ViewById
     SearchBox searchbox;
-    private boolean autoCompleteModeOn;
-    private boolean searchHasFailedOnce;
+    @ViewById
+    TextView question;
 
     @Override
     protected void onStart() {
@@ -209,7 +216,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                 displaySubCategories(category);
             }
         });
-        mVenueCardRecyclerAdapter = new VenueCardRecyclerAdapter(venues, new RecyclerViewListener<Venue>() {
+        mVenueCardRecyclerAdapter = new VenueCardRecyclerAdapter(this, venues, new RecyclerViewListener<Venue>() {
             @Override
             public void onItemClickListener(View view, Venue item) {
                 if (item.getName().equals("Current Location")) {
@@ -347,6 +354,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
     }
 
     public void loadBaseCategories() {
+        question.setVisibility(View.GONE);
         String parentIDstring = pref.get(categoriesID, "");
         if (parentIDstring.equals("")) {
             getFoursquareCategories();
@@ -378,6 +386,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
 
     // Search for the subcategories of the category passed in and display them
     public void displaySubCategories(Category category) {
+        question.setVisibility(View.VISIBLE);
         List<Category> subcategories = category.getCategories();
         if (!subcategories.isEmpty()) {
             atBaseCategories = false;
@@ -466,6 +475,7 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                                     strArray[strArray.length - 1].equalsIgnoreCase("at") ||
                                     strArray[strArray.length - 1].equalsIgnoreCase("around")) {
                                 autoCompleteModeOn = true;
+                                question.setVisibility(View.GONE);
                             }
                         }
                     }
@@ -476,6 +486,8 @@ public class SearchActivity extends AppCompatActivity implements GoogleApiClient
                     // if we don't find any of the keywords, we switch autocompletemode off.
                     if (minPos == searchText.length()) {
                         autoCompleteModeOn = false;
+                        if (!atBaseCategories)
+                            question.setVisibility(View.VISIBLE);
                         display(mCategoryCardRecyclerAdapter, categories);
                     } else {
                         // update the adapter to display autocomplete results

@@ -22,18 +22,19 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="horizontal"
-        android:weightSum="4">
+        android:weightSum="@integer/card_view_weightsum">
 
         <TextView
             android:id="@+id/tvName"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_gravity="center"
-            android:layout_weight="3"
+            android:layout_weight="@integer/card_text_view_weight"
             android:gravity="center"
             android:padding="@dimen/abc_button_padding_horizontal_material"
-            android:textColor="@android:color/black"
+            android:textColor="@color/primary_dark"
             android:textSize="@dimen/category_text_size"
+            android:textStyle="bold"
             android:transitionName="name" />
 
         <ImageView
@@ -41,7 +42,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:layout_weight="1"
+            android:layout_weight="@integer/card_add_search_image_view_weight"
             android:clickable="true"
             android:paddingRight="@dimen/abc_control_padding_material"
             android:src="@drawable/ic_add" />

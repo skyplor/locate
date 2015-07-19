@@ -1,5 +1,6 @@
 package com.skypayjm.app.locate.adapter;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,8 +19,10 @@ public class VenueCardRecyclerAdapter extends BaseRecyclerAdapter<Venue, MyViewH
 
     private RecyclerViewListener<Venue> recyclerViewListener;
     private List<Venue> venues;
+    Context context;
 
-    public VenueCardRecyclerAdapter(List<Venue> venues, RecyclerViewListener<Venue> recyclerViewListener) {
+    public VenueCardRecyclerAdapter(Context context, List<Venue> venues, RecyclerViewListener<Venue> recyclerViewListener) {
+        this.context = context;
         this.recyclerViewListener = recyclerViewListener;
         this.venues = new ArrayList<>(venues);
     }
@@ -45,7 +48,7 @@ public class VenueCardRecyclerAdapter extends BaseRecyclerAdapter<Venue, MyViewH
         LinearLayout.LayoutParams loparams = (LinearLayout.LayoutParams) holder.tvName.getLayoutParams();
         if (loparams != null) {
             // Set only target params:
-            loparams.weight = 4;
+            loparams.weight = context.getResources().getInteger(R.integer.card_view_weightsum);
             holder.tvName.setLayoutParams(loparams);
         }
         holder.ivAddSearch.setVisibility(View.GONE);

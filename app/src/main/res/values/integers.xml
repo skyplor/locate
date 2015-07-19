@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="card_view_weightsum">5</integer>
+    <integer name="card_text_view_weight">4</integer>
+    <integer name="card_add_search_image_view_weight">1</integer>
+</resources>

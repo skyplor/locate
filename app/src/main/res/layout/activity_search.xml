@@ -13,14 +13,27 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentLeft="true"
+        android:layout_below="@+id/search_toolbar"
         android:layout_marginLeft="-6dp"
         android:layout_marginRight="-6dp"
-        android:elevation="4dp"
-        android:layout_below="@+id/search_toolbar" />
+        android:elevation="4dp" />
 
-    <android.support.v7.widget.RecyclerView
-        android:id="@+id/category_resultList"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_below="@+id/searchbox" />
+        android:layout_height="match_parent"
+        android:layout_below="@+id/searchbox"
+        android:layout_margin="@dimen/abc_dropdownitem_text_padding_left">
+
+        <TextView
+            android:id="@+id/question"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/searchQuestion" />
+
+        <android.support.v7.widget.RecyclerView
+            android:id="@+id/category_resultList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/question" />
+    </RelativeLayout>
 </RelativeLayout>
